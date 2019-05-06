@@ -1,0 +1,8 @@
+# PyCharm
+.idea/
+
+# CompuRacer Core state
+state/
+exp_files/
+rendered_files/
+_aiohttp/

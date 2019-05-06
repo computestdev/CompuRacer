@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+
+<html lang="en">
+	<head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Redeem voucher</title>
+        <script src="{{ url_for('static', filename='js/jquery.min.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/application.js') }}"></script>
+    </head>
+    <style>
+        .greytext {
+                color: gray;
+        }
+    </style>
+    <body>
+        <h1>Redeem your voucher!</h1>
+        <p class="greytext" id="msg">Redeem a voucher or reset the voucher database.</p>
+        <p>
+            Voucher code: 
+            <input class="greytext" type="text" name="code" id="code" value="COUPON2">
+            <br>
+            Redeem method: 
+            <input type="radio" name="method" id="very_insecure" value="very_insecure">         
+                <label for="very_insecure">Very insecure</label>
+            <input type="radio" name="method" id="insecure" value="insecure" checked> 
+                <label for="insecure">Insecure</label>
+            <input type="radio" name="method" id="secure" value="secure">
+                <label for="secure">Secure</label> 
+            <br>
+            Voucher type: 
+            <input type="radio" name="type" id="single" value="single">         
+                <label for="single">Single</label>
+            <input type="radio" name="type" id="multi" value="multi" checked>         
+                <label for="multi">Multi</label>
+            <br>
+            <button id="redeem">Redeem voucher</button>
+            <button id="reset">Reset database</button>
+            <br><br>
+            Coupon codes - 1x use: COUPON1, 10x use: COUPON2, 100x use: COUPON3:
+        </p>
+    </body>
+</html>
+

@@ -1,0 +1,6 @@
+# PyCharm
+.idea/
+
+# CompuRacer Core state
+state/
+src.zip

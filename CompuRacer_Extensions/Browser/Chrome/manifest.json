@@ -1,0 +1,24 @@
+{
+    "manifest_version": 2,
+    "name": "CompuRacer Chrome extension",
+    "version": "1.0",
+    "short_name": "Tool for detection and exploitation of race conditions in web apps",
+    "description": "Tool to redirect requests of interest to the CompuRacer Core to use them in the detection and exploitation of race conditions in web apps. You can activate the connected plugin by clicking on the white button. Then, it will turn red for three seconds. During this time, all interesting requests from the current tab will be redirected to the Core. The Core can use the requests to send them in parallel to the web app and trigger race conditions. It contains a hardcoded list of Core IPs it tries to connect to and also a list of request method and extension filters. There are no settings, so if you what to change this behavior, you have to alter the source code. The extension is an extended and improved version of the Sakurity Racer Chrome plugin that can be found at https://github.com/sakurity/racer",
+    "author": "Rob van Emous @ Computest",
+    "homepage_url": "https://github.com/RobvEmous/CompuRacer",
+    "permissions": [
+        "webRequest",   // for request redirection
+        "webRequestBlocking",
+        "<all_urls>",
+        "tabs",         // for getting the current tab URL
+        "management"    // for re-enabling itself
+    ],
+    "icons": { "48": "icons/icon_compu_racer.png"},
+    "background": {
+        "persistent": true,
+        "scripts": ["compu_racer_extension_browser.js"]
+    },
+    "browser_action": {
+        "default_icon": "icons/icon_disabled.png"
+    }
+}

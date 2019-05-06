@@ -1,0 +1,22 @@
+#---- For rest_server.py ----#
+Flask==1.0.2  # BSD
+lxml==4.2.5  # BSD
+
+#---- For compu_racer_core.py ----#
+tabulate==0.8.2  # MIT
+tqdm==4.31.1  # MIT
+
+#---- For geo_dns_resolver.py ----#
+cachetools==3.0.0  # MIT
+IPy==1.00  # BSD
+ratelimiter==1.2.0.post0  # Apache 1.1
+
+#---- For batch_sender_async.py ----#
+aiodns==1.1.1  # MIT
+urllib3==1.24.1  # MIT
+uvloop==0.12.2  # MIT
+aiohttp==3.4.4  # Apache 2.0
+async_timeout==3.0.1  # Apache 2.0
+
+#---- For batch.py ----#
+beautifulsoup4==4.7.1  # MIT
