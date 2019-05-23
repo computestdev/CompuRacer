@@ -127,6 +127,10 @@ function ignore(details) {
     }
 }
 
+function doReturn(block) {
+    return {'cancel': block}
+}
+
 function PreRequest(details) {
     // check ignore list
     if (ignore(details)) return doReturn(false);
