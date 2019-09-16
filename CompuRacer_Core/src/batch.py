@@ -6,6 +6,8 @@ It is able to aggregate results and keep track of whether it is changed.
 
 # --- All imports --- #
 import copy
+from collections import defaultdict
+
 import time
 from datetime import datetime
 import os
@@ -43,14 +45,14 @@ class Batch:
         self.results = {}
         self.rendered_file_dir = rendered_file_dir
         if custom_comparing is None:
-            self.custom_comparing = self.default_custom_comparing
+            self.custom_comparing = copy.deepcopy(self.default_custom_comparing)
         else:
             self.custom_comparing = custom_comparing
 
     @staticmethod
     def create_from_dict(a_dict, rendered_file_dir):
         if 'custom_comparing' not in a_dict:
-            a_dict['custom_comparing'] = Batch.default_custom_comparing
+            a_dict['custom_comparing'] = copy.deepcopy(Batch.default_custom_comparing)
         if 'sync_last_byte' not in a_dict:
             a_dict['sync_last_byte'] = False
         a_batch = Batch(name=a_dict['name'],
@@ -106,7 +108,7 @@ class Batch:
     def reset_ignored_fields(self):
         if self.custom_comparing['ignore'] == self.default_custom_comparing['ignore']:
             return -1
-        self.custom_comparing['ignore'] = self.default_custom_comparing['ignore']
+        self.custom_comparing['ignore'] = copy.deepcopy(self.default_custom_comparing['ignore'])
         self.redo_all_grouping(force=True)
 
     def check_missing_files(self, specified_content_id=None):
@@ -454,14 +456,17 @@ class Batch:
                 self.results['contents'][content_id]['files'].append(path)
                 representative['body'] = link
             elif content_type == 'json':
-                # todo fix: it will break if the content is not json after all..
-                representative['body'] = utils.read_json(representative['body'])
+                # it defaults to no parsing if the content is not json after all..
+                try:
+                    representative['body'] = utils.read_json(representative['body'])
+                except Exception as _:
+                    pass
 
             self.results['contents'][content_id]['groups'][i]['representative'] = representative
 
+
     def get_results(self, res_id, get_tables=False, get_groups=False):
         # todo implement a history of multiple results
-        # todo issues:  when requests are removed --> results invalid
         # todo          how to manage the growing list of historical results?
         if not self.has_results():
             # no results yet!
@@ -481,7 +486,25 @@ class Batch:
             if get_groups:
                 for i, group in enumerate(my_contents['groups']):
                     string += f"\t\tGroup {i} - {len(group['responses'])} item(s):\n"
-                    string += utils.tabbed_pprint_representative(group['representative'], 3, self.small) + "\n"
+
+                    if group['comparisons']:
+                        repres_new = copy.deepcopy(group['representative'])
+                        repres_new['headers'] = {}
+                        if 'body' in repres_new and 'body' not in group['comparisons']:
+                            repres_new['body'] = "Same-as-group-0"
+
+                        repres_new['headers'] = {}
+                        for repres_part in group['comparisons']:
+                            if repres_part in group['representative']['headers']:
+                                repres_new['headers'][repres_part] = copy.deepcopy(group['representative']['headers'][repres_part])
+                        diff_header_size = len(group['representative']['headers'].items()) - len(repres_new['headers'].items())
+                        if diff_header_size > 0:
+                            repres_new['headers']['Same-as-group-0'] = str(sorted(list(set(
+                                group['representative']['headers'].keys()).difference(list(repres_new['headers'].keys())))))
+                        string += utils.tabbed_pprint_representative(repres_new, 3, self.small) + "\n"
+                    else:
+                        string += utils.tabbed_pprint_representative(group['representative'], 3, self.small) + "\n"
+
                 string += f"\n\tRequest id (continued) '{content_id}':\n\n"
 
             if get_tables:
@@ -493,7 +516,7 @@ class Batch:
                                                                         ), 2)
 
                 string += utils.tabbed_string(utils.get_res_spec_tables(responses, {
-                    "headers": (lambda x: len(utils.format_json(x)), 'bytes', None)}
+                    "headers": (lambda x: len(utils.format_json(x)), None, 'bytes')}
                                                                         ), 2)
 
             # always display the grouping information

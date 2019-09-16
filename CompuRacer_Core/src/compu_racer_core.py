@@ -14,15 +14,17 @@ import urllib
 from enum import Enum
 from functools import partial
 from multiprocessing import Queue
-from tkinter import *
-from tkinter import filedialog
 
 try:
-    from tqdm import tqdm
-except ModuleNotFoundError:
-    sys.stderr.write("Could not find first external dependancy, please run:\n"
-                     "\t pip install -r requirements.txt\n")
-    exit(1)
+    from tkinter import *
+    from tkinter import filedialog
+except ModuleNotFoundError as e:
+    # this only happens if the system has no display
+    # and then we will not use this lib anyway
+    # look at the check in ../main.py
+    pass
+
+from tqdm import tqdm
 from tabulate import tabulate
 
 import src.batch_sender_async as sender
@@ -32,8 +34,15 @@ from .batch import Batch
 from .command_processor import CommandProcessor
 from .rest_server import RestServer
 
-root = Tk()
-root.withdraw()
+root = None
+try:
+    root = Tk()
+    root.withdraw()
+except Exception as e:
+    # this only happens if the system has no display
+    # and then we will not use this anyway
+    # look at the check in ../main.py
+    pass
 
 # --- Authorship information --- #
 __author__ = "R.J. van Emous @ Computest"
@@ -82,6 +91,7 @@ class CompuRacer:
     command_processor = None
     rest_interface_thread = None
 
+    proxy = None
     server_queue = None
     dialog_queue = None
 
@@ -89,11 +99,14 @@ class CompuRacer:
     immediate_batch_name = "Imm"
     progress_bar_width = 100
 
-    def __init__(self, queue):
+    def __init__(self, port, proxy, queue):
         """
         Creates a new CompuRacer instance
         :param queue: the queue to be used when we want to display a filepicker dialog to the user
         """
+        self.proxy = proxy
+
+        # if the queue is None, we cannot and will not show dialogs
         self.dialog_queue = queue
 
         # add shutdown hooks
@@ -136,7 +149,7 @@ class CompuRacer:
         self.add_all_commands()
 
         # initialize the REST server
-        self.rest_server = RestServer()
+        self.rest_server = RestServer(port=port)
 
     def __str__(self):
         """
@@ -174,6 +187,10 @@ class CompuRacer:
         """
         Starts the CompuRacer
         """
+        # indicate whether we use an upstream SOCKS proxy
+        if self.proxy:
+            self.print_formatted(f"Using upstream SOCKS proxy: '{self.proxy}'", utils.QType.INFORMATION)
+
         # start the REST server
         self.server_queue = self.rest_server.start(self)
 
@@ -191,6 +208,8 @@ class CompuRacer:
         utils.clear_output()
         self.command_processor.start()
 
+
+
     def comm_general_save(self, do_print=True):
         """
         Stores the current CompuRacer state when changed.
@@ -206,8 +225,8 @@ class CompuRacer:
                 store_string = "Storing current state.."
             state_to_save = copy.deepcopy(self.state)
             state_to_save['batches'] = {}
-            self.__store_json(self.CLIENT_CONFIG, state_to_save, self.CLIENT_BACKUP, store_string)
             self.set_unchanged()
+            self.__store_json(self.CLIENT_CONFIG, state_to_save, self.CLIENT_BACKUP, store_string)
             time.sleep(0.25)
         # store individual batches
         if not os.path.exists(self.CLIENT_BATCHES_LOC):
@@ -305,6 +324,7 @@ class CompuRacer:
             "display_welcome": True,
             "colored_output": False,
             "current_batch": None,
+            "project_name": "",
             "batches": {},
             "requests": {},
             "concepts": None,
@@ -316,11 +336,12 @@ class CompuRacer:
         }
 
     @staticmethod
-    def create_new_state(colored_output, the_requests=None, batches=None, concepts=None, current_batch=None):
+    def create_new_state(colored_output, the_requests=None, project_name="", batches=None, concepts=None, current_batch=None):
         """
         Gets the a new state dictionary
         :param colored_output: if True, to colors the output
         :param the_requests: the dict of requests
+        :param project_name: the default project name prefix
         :param batches: the dict of batches
         :param concepts: not used
         :param current_batch: the current batch name
@@ -334,6 +355,7 @@ class CompuRacer:
             "display_welcome": True,
             "colored_output": colored_output,
             "current_batch": current_batch,
+            "project_name": project_name,
             "batches": batches,
             "requests": the_requests,
             "concepts": concepts,
@@ -405,8 +427,8 @@ class CompuRacer:
                                            "Note: Enables when no arguments are provided", self,
                                            arg_spec_opt=[("Enable color", bool, True)]
                                            )
-        self.command_processor.add_command(["s", "save"], self.comm_general_save, "Saves the current state", self)
-        self.command_processor.add_command(["q", "quit"], self.comm_general_shutdown, "Saves the current state and shuts down the racer", self)
+        self.command_processor.add_command(["s", "save"], self.comm_general_save, "Saves the current state.", self)
+        self.command_processor.add_command(["q", "quit"], self.comm_general_shutdown, "Saves the current state and shuts down the racer.", self)
 
     def add_commands_mode(self):
         """
@@ -432,7 +454,7 @@ class CompuRacer:
         Adds all commands that are related to viewing, comparing and removing requests
         """
         self.command_processor.add_command(["reqs"], self.comm_requests_get,
-                                           "Gets a sorted table of basic request info", self,
+                                           "Gets a sorted table of basic request info.", self,
                                            arg_spec_opt=[("First request ID", str, "* all requests *"),
                                                          ("Last request ID", str, "* only first request *"),
                                                          (f"Sort order {[str(order) for order in SortOrder]}", SortOrder,
@@ -443,7 +465,7 @@ class CompuRacer:
                                            arg_spec_opt=[("Request ID", str, "* the most recently added request *")]
                                            )
         self.command_processor.add_command(["comp reqs"], self.comm_requests_comp,
-                                           "Compares the contents of two requests,", self,
+                                           "Compares the contents of two requests.", self,
                                            arg_spec=[("First request ID", str), ("Second request ID", str)],
                                            arg_spec_opt=[("Also print matches of comparison", bool, False)]
                                            )
@@ -471,7 +493,14 @@ class CompuRacer:
                                            arg_spec=[("Name of the batch", str)],
                                            arg_spec_opt=[("If true, set new batch as current batch, else it keeps the current value", bool, True)]
                                            )
-        self.command_processor.add_command(["bss", "batches"], self.comm_batches_info,
+        self.command_processor.add_command(["get proj", "get project"], self.comm_batches_get_project,
+                                           "Gets the project name prefix with which all new batch names will begin.", self
+                                           )
+        self.command_processor.add_command(["set proj", "set project"], self.comm_batches_set_project,
+                                           "Sets the project name prefix with which all new batch names will now begin: 'project_name'_<batch_name>", self,
+                                           arg_spec_opt=[("Name of the project", str, "* Empty string *")]
+                                           )
+        self.command_processor.add_command(["bss", "ls", "dir", "batches"], self.comm_batches_info,
                                            "Gets a table of info of all batches", self)
         self.command_processor.add_command(["set curr"], self.comm_batches_set_current,
                                            "Sets the current batch by index", self,
@@ -517,10 +546,16 @@ class CompuRacer:
                                            arg_spec_opt=[("Index of the first batch", int, "* the current batch *"),
                                                          ("Index of the last batch", int, "* only the first batch *")]
                                            )
+        self.command_processor.add_command(["imp bss ls", "imp batches list"], self.comm_batches_import_list,
+                                           "Lists the batches (with indices) that can be imported.", self
+                                           )
         self.command_processor.add_command(["imp bss", "imp batches"], self.comm_batches_import,
-                                           "Import a previously exported batch by selecting the file.\n"
-                                           "Duplicates will be renamed.", self)
-
+                                           "Import a previously exported batch by number or using a file picker (if no arguments).\n"
+                                           "If the system does not support showing a dialog, it will show an error message"
+                                           "Duplicates will be renamed.", self,
+                                           arg_spec_opt=[("Index of the first batch", int, "* opens file picker dialog *"),
+                                                         ("Index of the last batch", int, "* only the first batch *")]
+                                           ),
         self.command_processor.add_command(["reg bss", "regroup batches"], self.comm_batches_regroup,
                                            "For all batches, force regroup the results. Useful when grouping code is updated.\n"
                                            "Note: Takes some time.", self)
@@ -984,11 +1019,17 @@ class CompuRacer:
     def rem_request(self, request_id, ask_confirmation=False):
         with self.requests_list_lock:
             if request_id not in self.state['requests']:
-                self.print_formatted(f"Cannot remove request: The request with id '{request_id}' is not in the total request list!",
+                self.print_formatted(f"Cannot remove request:\n\t"
+                                     f"The request with id '{request_id}' is not in the total request list!",
                                      utils.QType.ERROR)
                 return -1
             used_in = self.request_used_in(self, request_id)
             if used_in:
+                if self.immediate_batch_name in used_in:
+                    self.print_formatted(f"Not allowed to remove request:\n\t"
+                                         f"The request with id '{request_id}' is (also) used by the immediate batch!",
+                                         utils.QType.ERROR)
+                    return -1
                 if not ask_confirmation:
                     self.print_formatted(f"The request with id '{request_id}' is used by batches: "
                                          f"{used_in}. It must be removed individually.",
@@ -1015,6 +1056,17 @@ class CompuRacer:
     # ------------------------------------- Batch command functions ------------------------------------- #
     # --------------------------------------------------------------------------------------------------- #
     @staticmethod
+    def get_batch_result_formatting():
+        return {re.compile(r".*?\t\s{10}[12]\d\d\s\s.*?"): utils.QType.GREEN,
+                re.compile(r".*?\t\s{10}[3]\d\d\s\s.*?"): utils.QType.YELLOW,
+                re.compile(r".*?\t\s{10}[4]\d\d\s\s.*?"): utils.QType.RED,
+                re.compile(r".*?\t\s{10}[5]\d\d\s\s.*?"): utils.QType.BLUE,
+                re.compile(r"'status_code': [12].."): utils.QType.GREEN,
+                re.compile(r"'status_code': 3.."): utils.QType.YELLOW,
+                re.compile(r"'status_code': 4.."): utils.QType.RED,
+                re.compile(r"'status_code': 5.."): utils.QType.BLUE}
+
+    @staticmethod
     def comm_batches_send(self, index=None, print_results=True, immediate_allowed=False):
         name = self.batch_index_to_name(self, index)
         if name == -1:
@@ -1031,17 +1083,14 @@ class CompuRacer:
         if batch.has_results() and not self.command_processor.accept_yes_no("Batch already has results, overwrite?", utils.QType.WARNING):
             self.print_formatted(f"Batch sending cancelled.", utils.QType.INFORMATION)
             return -1
-        batch.overwrite_results(sender.send_batch(batch, self.state['requests']))
+        batch.overwrite_results(sender.send_batch(batch, self.state['requests'], self.proxy))
 
-        self.print_formatted("The batch is sent successfully.", utils.QType.INFORMATION)
+        self.print_formatted("The batch is sent.", utils.QType.INFORMATION)
         if print_results:
             look_ahead = "(?=\n\s{2}[1-5][0-9]{2}|\n\s{2}\n|\n\s{2}Total)"
             self.print_formatted_multi(f"Results:\n{batch.get_last_results(True, True)}",
                                        default_type=utils.QType.NONE,
-                                       special_types={re.compile(r"'status_code': [12].."): utils.QType.GREEN,
-                                                      re.compile(r"'status_code': 3.."): utils.QType.YELLOW,
-                                                      re.compile(r"'status_code': 4.."): utils.QType.RED,
-                                                      re.compile(r"'status_code': 5.."): utils.QType.BLUE}
+                                       special_types=self.get_batch_result_formatting()
                                        )
 
     @staticmethod
@@ -1069,7 +1118,15 @@ class CompuRacer:
         return self.set_curr_batch_by_name(self, name, immediate_allowed)
 
     @staticmethod
+    def add_prefix(self, name):
+        if name is None or 'project_name' not in self.state or self.state['project_name'] == "":
+            return name
+        else:
+            return self.state['project_name'] + name
+
+    @staticmethod
     def comm_batches_create_new(self, name, set_current_batch=True, immediate_allowed=False):
+        name = self.add_prefix(self, name)
         if not immediate_allowed and name == self.immediate_batch_name:
             self.print_formatted(f"Not allowed to create immediate batch from interface!", utils.QType.ERROR)
             return -1
@@ -1082,6 +1139,21 @@ class CompuRacer:
         self.print_formatted(new_batch.get_summary(), utils.QType.BLUE)
         if set_current_batch:
             return self.set_curr_batch_by_name(self, name)
+
+    @staticmethod
+    def comm_batches_get_project(self):
+        if 'project_name' not in self.state or self.state['project_name'] == "":
+            self.print_formatted(f"The current project name prefix is empty.", utils.QType.INFORMATION)
+            return -1
+        self.print_formatted(f"Current project name prefix: '{self.state['project_name']}'", utils.QType.INFORMATION)
+
+    @staticmethod
+    def comm_batches_set_project(self, name=None):
+        if name is None:
+            self.__change_state('project_name', "")
+        else:
+            self.__change_state('project_name', name + "_")
+        self.print_formatted(f"Current project name prefix: '{self.state['project_name']}'", utils.QType.INFORMATION)
 
     @staticmethod
     def comm_batches_get_contents(self, index, full_contents=False):
@@ -1105,10 +1177,7 @@ class CompuRacer:
             look_ahead = "(?=\n\s{2}[1-5][0-9]{2}|\n\s{2}\n|\n\s{2}Total)"
             self.print_formatted_multi(f"Results:\n{results}",
                                        default_type=utils.QType.NONE,
-                                       special_types={re.compile(r"'status_code': [12].."): utils.QType.GREEN,
-                                                      re.compile(r"'status_code': 3.."): utils.QType.YELLOW,
-                                                      re.compile(r"'status_code': 4.."): utils.QType.RED,
-                                                      re.compile(r"'status_code': 5.."): utils.QType.BLUE}
+                                       special_types=self.get_batch_result_formatting()
                                        )
 
     @staticmethod  # internal usage
@@ -1120,6 +1189,7 @@ class CompuRacer:
 
     @staticmethod
     def comm_batches_rename(self, name_new, index=None):
+        name_new = self.add_prefix(self, name_new)
         name = self.batch_index_to_name(self, index)
         if name == -1:
             return -1
@@ -1140,6 +1210,7 @@ class CompuRacer:
 
     @staticmethod
     def comm_batches_copy(self, name_new, index=None):
+        name_new = self.add_prefix(self, name_new)
         name = self.batch_index_to_name(self, index)
         if name == -1:
             return -1
@@ -1163,13 +1234,30 @@ class CompuRacer:
             self.exp_batch_by_name(self, name)
 
     @staticmethod
-    def comm_batches_import(self):
-        # select one or more batch files to import
-        filenames = None
-        while not filenames:
-            filenames = self.select_files(self, "Select one or more batch export files", ".json")
-            if not filenames and not self.command_processor.accept_yes_no("Selected files are not valid, retry?", utils.QType.WARNING):
-                return -1
+    def comm_batches_import_list(self):
+        self.print_formatted(f"Table of batches that can be imported:", utils.QType.INFORMATION)
+        output = tabulate([[name.split(".")[0]] for name in self.list_exp_batch_files(self)],
+                          ["Name"], showindex="always", tablefmt="simple") + "\n"
+        self.print_formatted(output, utils.QType.NONE)
+
+    @staticmethod
+    def comm_batches_import(self, first_index=None, last_index=None):
+
+        if first_index is None and last_index is None and self.dialog_queue is None:
+            self.print_formatted(f"Importing via dialog failed: the system does not support it!",
+                                     utils.QType.ERROR)
+            return -1
+
+        filenames = self.imp_batch_indices_to_names(self, first_index, last_index)
+
+        # check if dialog must be shown
+        if filenames == -1:
+            # select one or more batch files to import
+            filenames = None
+            while not filenames:
+                filenames = self.select_files(self, "Select one or more batch export files", ".json")
+                if not filenames and not self.command_processor.accept_yes_no("Selected files are not valid, retry?", utils.QType.WARNING):
+                    return -1
 
         success_batches = []
         failed_batches = []
@@ -1197,6 +1285,23 @@ class CompuRacer:
 
     # ------------------------------------- Batch command helpers ------------------------------------- #
 
+    # looks up all corresponding !importable! batch names
+    # will fail if one lookup fails
+    @staticmethod
+    def imp_batch_indices_to_names(self, start_index=None, end_index=None):
+        if start_index is None or end_index is None:
+            name = self.imp_batch_index_to_name(self, start_index)
+            if name == -1:
+                return -1
+            return [name]
+        names = []
+        indices = self.list_exp_batch_files(self)
+        for i in range(start_index, end_index + 1):
+            names.append(self.imp_batch_index_to_name(self, i, indices))
+        if -1 in names:
+            return -1
+        return names
+
     # looks up all corresponding batch names
     # will fail if one lookup fails
     @staticmethod
@@ -1205,7 +1310,7 @@ class CompuRacer:
             name = self.batch_index_to_name(self, start_index)
             if name == -1:
                 return -1
-            return [self.batch_index_to_name(self, start_index)]
+            return [name]
         names = []
         indices = self.get_batch_indices()
         for i in range(start_index, end_index + 1):
@@ -1213,6 +1318,20 @@ class CompuRacer:
         if -1 in names:
             return -1
         return names
+
+    @staticmethod
+    def imp_batch_index_to_name(self, index, indices=None):
+        if index is None:
+            return -1
+        if not type(index) is int:
+            self.print_formatted(f"Batch index must be an integer! This is not the case: '{index}'", utils.QType.ERROR)
+            return -1
+        if not indices:
+            indices = self.list_exp_batch_files(self)
+        if index < 0 or index >= len(indices):
+            self.print_formatted(f"Batch index '{index}' does not exist!", utils.QType.ERROR)
+            return -1
+        return os.path.abspath(self.BATCHES_EXP_FILE_DIR + indices[index])
 
     @staticmethod
     def batch_index_to_name(self, index, indices=None):
@@ -1231,7 +1350,7 @@ class CompuRacer:
             return -1
         return indices[index]
 
-    @staticmethod
+    @staticmethod  # internal usage
     def set_curr_batch_by_name(self, name, immediate_allowed=False):
         if not immediate_allowed and name == self.immediate_batch_name:
             self.print_formatted(f"Not allowed to set immediate batch as current batch from interface!", utils.QType.ERROR)
@@ -1252,7 +1371,7 @@ class CompuRacer:
             self.print_formatted(f"{e}", utils.QType.ERROR)
             return -1
 
-    @staticmethod
+    @staticmethod  # internal usage
     def exp_batch_without_requests_by_name(self, folder, name):
         the_batch = self.state['batches'][name]
 
@@ -1267,7 +1386,7 @@ class CompuRacer:
         with open(exp_path, 'w') as file:
             utils.store_json_file(exp_path, js_batch)
 
-    @staticmethod
+    @staticmethod  # internal usage
     def exp_batch_by_name(self, name):
         self.print_formatted(f"Exporting batch '{name}'..", utils.QType.INFORMATION)
 
@@ -1445,6 +1564,10 @@ class CompuRacer:
                     new_body[urllib.parse.unquote(key_value[0])] = urllib.parse.unquote(key_value[1])
                 the_request['body'] = new_body
         return the_request
+
+    @staticmethod
+    def list_exp_batch_files(self):
+        return sorted(list(os.listdir(self.BATCHES_EXP_FILE_DIR)))
 
     @staticmethod
     def remove_batch_file(self, name):

@@ -24,6 +24,7 @@ import src.aiohttp as aiohttp
 import chardet
 import uvloop
 from src.aiohttp import ClientSession
+from aiohttp_socks import SocksConnector
 
 import src.utils as utils
 from tqdm import tqdm
@@ -46,9 +47,18 @@ def __decode_response(response):
     # decode headers
     response['headers'] = {}
     if response['headers_temp'] and len(response['headers_temp']) > 0:
-        encoding = chardet.detect(list(response['headers_temp'].keys())[0])['encoding']
-        for key in response['headers_temp'].keys():
-            response['headers'][key.decode(encoding)] = response['headers_temp'][key].decode(encoding)
+        # guess encoding for headers
+        encoding = chardet.detect(response['headers_temp'][0][0])['encoding']
+        # parse headers individually (duplicates get an added number)
+        dups = {}
+        for header_item in sorted(response['headers_temp'], key=lambda x: (x[0], x[1])):
+            header_item_decoded = [header_item[0].decode(encoding), header_item[1].decode(encoding)]
+            if header_item_decoded[0] in dups:
+                dups[header_item_decoded[0]] += 1
+                header_item_decoded[0] += f"-{dups[header_item_decoded[0]]}"
+            else:
+                dups[header_item_decoded[0]] = 1
+            response['headers'][header_item_decoded[0]] = header_item_decoded[1]
     del response['headers_temp']
     # decode body
     response['body'] = {}
@@ -66,8 +76,8 @@ def __decode_response(response):
 async def __read_response(response, send_time, response_time):
     result = dict({'send_time': send_time, 'response_time': response_time})
     result['status_code'] = response.status
-    # read headers
-    result['headers_temp'] = dict(response.raw_headers)
+    # read headers (fixed bug, allowed only one set-cookie header)
+    result['headers_temp'] = list(response.raw_headers)
     # read body
     result['body_temp'] = await response.content.read(-1)
     return result
@@ -118,7 +128,9 @@ def __prepare_request(the_request, allow_redirects, final_byte_time=None):
         request_content['headers']['Cookie'] = urllib.parse.unquote(a_request['headers']['Cookie'])
     # decode and restore content if necessary
     if 'Content-Type' in a_request['headers']:
-        if "json" in a_request['headers']['Content-Type'].lower() and type(a_request['body']) is str:
+        if "json" in a_request['headers']['Content-Type'].lower() \
+                and type(a_request['body']) is str \
+                and a_request['body']:
             request_content['json'] = utils.read_json(a_request['body'])
         else:
             if type(a_request['body']) is dict:
@@ -146,7 +158,9 @@ def __prepare_request(the_request, allow_redirects, final_byte_time=None):
                     body += separator + "--" + "\r\n"
                     body = str.encode(body)
             elif a_request['headers']['Content-Type'].startswith("application/x-www-form-urlencoded"):
-                body = urllib.parse.unquote(a_request['body'])
+                # body = urllib.parse.unquote(a_request['body'])
+                body = a_request['body']
+                pass
             else:
                 body = a_request['body']
             request_content['data'] = body
@@ -178,7 +192,7 @@ def prepare_sending_order(items):
     return full_send_order
 
 
-async def run(batch, requests):
+async def run(batch, requests, proxy):
     # Create client session that will ensure we don't open a new connection per each request.
     # todo It is synced on the whole second part of the wall clock time to make testing in Wireshark easier.
     # todo This results in at most 1.5 seconds delay and can be removed later on
@@ -202,7 +216,13 @@ async def run(batch, requests):
         prepared_requests[req_id] = __prepare_request(requests[req_id], batch.allow_redirects, last_byte_time)
 
     tasks = []
-    async with ClientSession(connector=aiohttp.TCPConnector(verify_ssl=False)) as session:
+
+    if proxy is not None:
+        connector = SocksConnector.from_url(proxy, verify_ssl=False)
+    else:
+        connector = aiohttp.TCPConnector(verify_ssl=False)
+
+    async with ClientSession(connector=connector) as session:
         send_order = prepare_sending_order(batch.items)
         for key in send_order:
             wait_time = key[1]
@@ -221,7 +241,7 @@ async def run(batch, requests):
         # results = await asyncio.gather(*tasks)
         results = [await f for f in tqdm(asyncio.as_completed(tasks),
                                          total=len(tasks),
-                                         desc="Receiving",
+                                         desc="Receiving ",
                                          ncols=progress_bar_width)]
 
     # decode all responses
@@ -229,17 +249,20 @@ async def run(batch, requests):
                          'end_time': str(datetime.datetime.fromtimestamp(round(get_time_ns() / 1e9))),
                          'contents': defaultdict(list)}
 
+    errors = ""
     for i, result in enumerate(tqdm(results,
                                     desc="Processing",
                                     ncols=progress_bar_width)):
         if isinstance(result[1], Exception):
-            print(f"Error in sending request {i} :\n{utils.tabbed_pprint_string(result, 1)}")
+            errors += f"Error in sending request {i} :\n{utils.tabbed_pprint_string(result, 1)}\n"
             continue
         for j, response in enumerate(result[1]):
             response_decoded = __decode_response(response)
             response_decoded['wait_time'] = result[0][1]
             response_decoded['send_index'] = j
             responses_decoded['contents'][result[0][0]].append(copy.deepcopy(response_decoded))
+    time.sleep(0.1)
+    print(errors)
     # sort lists to send_time
     for request_id in responses_decoded['contents'].keys():
         responses_decoded['contents'][request_id] = sorted(responses_decoded['contents'][request_id],
@@ -264,10 +287,10 @@ def stop_loop(my_loop):
     my_loop.close()
 
 
-def send_batch(batch, the_requests, my_loop=None):
+def send_batch(batch, the_requests, proxy=None, my_loop=None):
     my_loop, new_loop = get_loop(my_loop)
 
-    future = asyncio.ensure_future(run(batch, the_requests))
+    future = asyncio.ensure_future(run(batch, the_requests, proxy))
     res_parsed = my_loop.run_until_complete(future)
 
     if new_loop:
@@ -276,11 +299,11 @@ def send_batch(batch, the_requests, my_loop=None):
     return res_parsed
 
 
-def send_batches(batches, the_requests, my_loop=None):
+def send_batches(batches, the_requests, proxy=None, my_loop=None):
     my_loop, new_loop = get_loop(my_loop)
     results = []
     for batch in batches:
-        results.append(send_batch(batch, the_requests, my_loop))
+        results.append(send_batch(batch, the_requests, proxy, my_loop))
     if new_loop:
         stop_loop(my_loop)
     return results

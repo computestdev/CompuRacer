@@ -26,9 +26,13 @@ import base64
 import threading
 import time
 import json
+#import http.client as client
+#import urllib
+import requests
 
 from javax.swing import JMenu, JMenuItem, JCheckBoxMenuItem, JOptionPane, JLabel, ImageIcon
-from burp import IBurpExtender, IHttpRequestResponse, IResponseInfo, IContextMenuFactory, IContextMenuInvocation, IExtensionStateListener
+from burp import IBurpExtender, IHttpRequestResponse, IResponseInfo, IContextMenuFactory, IContextMenuInvocation, \
+    IExtensionStateListener
 from java.net import URL, URI
 
 # --- Configuration --- #
@@ -41,15 +45,14 @@ racer_alive = False
 
 
 class Cb:
-
     callbacks = None
     helpers = None
 
     def __init__(self, callbacks):
         Cb.callbacks = callbacks
         Cb.helpers = callbacks.getHelpers()
-        
-        
+
+
 class MenuFactory(IContextMenuFactory):
 
     def __init__(self):
@@ -66,7 +69,7 @@ class MenuFactory(IContextMenuFactory):
                 invoker.getInvocationContext() == IContextMenuInvocation.CONTEXT_MESSAGE_VIEWER_REQUEST or
                 invoker.getInvocationContext() == IContextMenuInvocation.CONTEXT_TARGET_SITE_MAP_TABLE or
                 invoker.getInvocationContext() == IContextMenuInvocation.CONTEXT_PROXY_HISTORY
-                ):
+        ):
             return None
 
         self.messages = self.invoker.getSelectedMessages()
@@ -88,7 +91,8 @@ class MenuFactory(IContextMenuFactory):
         return [menu_send]
 
     def start_request_transmitter(self, event):
-        t = threading.Thread(name='Request transmitter', target=self.send_requests_batched_to_racer, args=(self.messages,))
+        t = threading.Thread(name='Request transmitter', target=self.send_requests_batched_to_racer,
+                             args=(self.messages,))
         t.start()
 
     def send_requests_batched_to_racer(self, requests):
@@ -120,8 +124,8 @@ class MenuFactory(IContextMenuFactory):
             print("Failed! {}".format(e))
 
     @staticmethod
-    def send_requests_to_racer(requests):
-        print("> Sending {} request(s) to racer..".format(len(requests)))
+    def send_requests_to_racer(the_requests):
+        print("> Sending {} request(s) to racer..".format(len(the_requests)))
         # header for request to racer
         global compuRacer_ip, compuRacer_port, add_request_path
         request_headers = ["POST /{} HTTP/1.1".format(add_request_path),
@@ -129,12 +133,13 @@ class MenuFactory(IContextMenuFactory):
                            "Accept: */*",
                            "Connection: close",
                            "Content-Type: application/json",
-                           #"X-Requested-With: Burp extension"
+                           # "X-Requested-With: Burp extension"
                            ]  # it auto-generates the content-length header
+        request_headers_dict = {header.split(": ")[0]: header.split(": ")[1] for header in request_headers[1:]}
         print(request_headers)
         # build header and json body of sub-request
         total_body = {'requests': []}
-        for i, request in enumerate(requests):
+        for i, request in enumerate(the_requests):
             details = Cb.helpers.analyzeRequest(request)
             headers_list = list(details.getHeaders())
             try:
@@ -172,24 +177,50 @@ class MenuFactory(IContextMenuFactory):
         total_body_bytes = Cb.helpers.stringToBytes(json.dumps(total_body))
         print('Requests: ', len(total_body['requests']), ' body: ', len(total_body_bytes), 'bytes')
 
-        request = Cb.helpers.buildHttpMessage(request_headers, total_body_bytes)
+        # This approach uses the SOCKS proxy:
+        # request = Cb.helpers.buildHttpMessage(request_headers, total_body_bytes)
         print("> Sending requests: \n{}\n".format(request_headers[0]))
         try:
-            response = Cb.callbacks.makeHttpRequest(Cb.helpers.buildHttpService(compuRacer_ip, int(compuRacer_port), False), request)
+            #response_str = make_request(method="POST",
+            #                            url="http://{}:{}/{}".format(compuRacer_ip, compuRacer_port, add_request_path),
+            #                            headers=request_headers_dict,
+            #                            body=total_body_bytes)
+            response_str = requests.post(url="http://{}:{}/{}".format(compuRacer_ip, compuRacer_port, add_request_path),
+                                         json=total_body,
+                                         timeout=5
+                                         ).status_code
+            # This approach uses the SOCKS proxy:
+            # response = Cb.callbacks.makeHttpRequest(
+            #    Cb.helpers.buildHttpService(compuRacer_ip, int(compuRacer_port), False), request)
         except Exception as e:
             print("Oh noo:")
             print(e)
             return
-        response_str = Cb.helpers.bytesToString(response.getResponse())
+        # This approach uses the SOCKS proxy:
+        # response_str = Cb.helpers.bytesToString(response.getResponse())
         print("> Got response: \n{}\n".format(response_str))
-        if not 200 <= Cb.helpers.analyzeResponse(response.getResponse()).getStatusCode() <= 299:
-            print("> Failed to send requests: {}".format(total_body))
+        if not 200 <= int(response_str):  # Cb.helpers.analyzeResponse(response.getResponse()).getStatusCode() <= 299:
+            print("> Failed to send the_requests: {}".format(total_body))
         else:
-            print("> Done sending requests to racer!\n")
+            print("> Done sending the_requests to racer!\n")
+
+
+def make_request(method, url, headers, body, timeout):
+    try:
+        #conn = client.HTTPConnection(url.split("/")[0], timeout=timeout)
+        response = requests.request(method=method,
+                                    url="/".join(url.split("/")[1:]),
+                                    headers=headers,
+                                    body=body)
+        #response = conn.getresponse()
+    except Exception as e:
+        print(e)
+        return 400
+    else:
+        return response.status_code
 
 
 class BurpExtender(IBurpExtender, IExtensionStateListener):
-
     ext_name = "RaceConditionTester"
     ext_version = '0.1'
     loaded = True
@@ -200,7 +231,7 @@ class BurpExtender(IBurpExtender, IExtensionStateListener):
         Cb.callbacks.setExtensionName(self.ext_name)
 
         Cb.callbacks.registerContextMenuFactory(MenuFactory())
-        callbacks.registerExtensionStateListener(self);
+        callbacks.registerExtensionStateListener(self)
 
         self.start_alive_checker()
 
@@ -213,15 +244,19 @@ class BurpExtender(IBurpExtender, IExtensionStateListener):
 
     def alive_checker(self):
         global compuRacer_ip, compuRacer_port, alive_check_path, racer_alive
-        request = Cb.helpers.buildHttpRequest(URL("http://{}:{}/{}".format(compuRacer_ip, compuRacer_port, alive_check_path)))
+        request = Cb.helpers.buildHttpRequest(
+            URL("http://{}:{}/{}".format(compuRacer_ip, compuRacer_port, alive_check_path)))
         service = Cb.helpers.buildHttpService(compuRacer_ip, int(compuRacer_port), False)
         unloaded = False
         old_alive = racer_alive
         while not unloaded:
             try:
-                response = Cb.callbacks.makeHttpRequest(service, request)
-                if response and response.getResponse():
-                    racer_alive = Cb.helpers.analyzeResponse(response.getResponse()).getStatusCode() == 200
+                # This approach uses the SOCKS proxy:
+                # response = Cb.callbacks.makeHttpRequest(service, request)
+                response = requests.get("http://{}:{}/{}".format(compuRacer_ip, compuRacer_port, alive_check_path),
+                                        timeout=2)
+                if response and response.status_code:  # response.getResponse():
+                    racer_alive = response.status_code == 200  # Cb.helpers.analyzeResponse(response.getResponse()).getStatusCode() == 200
                 else:
                     # not response --> failed
                     racer_alive = False
@@ -243,4 +278,3 @@ class BurpExtender(IBurpExtender, IExtensionStateListener):
         self.loaded = False
         self.t.join()
         print("Done.")
-

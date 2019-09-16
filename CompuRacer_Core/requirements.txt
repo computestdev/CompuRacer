@@ -13,9 +13,10 @@ ratelimiter==1.2.0.post0  # Apache 1.1
 
 #---- For batch_sender_async.py ----#
 aiodns==1.1.1  # MIT
-urllib3==1.24.2  # MIT
+urllib3==1.24.1  # MIT
 uvloop==0.12.2  # MIT
 aiohttp==3.4.4  # Apache 2.0
+aiohttp_socks==0.2.2  # Apache 2.0
 async_timeout==3.0.1  # Apache 2.0
 
 #---- For batch.py ----#

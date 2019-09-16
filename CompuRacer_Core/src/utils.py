@@ -119,8 +119,12 @@ def get_res_spec_table(results_of_one_request, field_name, aggr=None):
             col_name += f" {aggr[1]}"
         if len(aggr) > 2 and aggr[2] is not None:
             col_name += f" ({aggr[2]})"
-    output = tabulate(contents, [col_name, "Amount"], tablefmt="simple") + "\n"
+    output = tabulate(contents, [col_name, "Amount"], tablefmt="simple", stralign='right') + "\n"
     return output
+
+
+def side_by_side_tables(tables_string, num_rows):
+    tables = tables_string.split("\t\n")
 
 
 def key_value_or_none(dict, key):
@@ -456,7 +460,7 @@ def tabbed_pprint_request(a_request, num_tabs=0):
     return "\n".join([tabbed_pprint_string(item, num_tabs) for item in items])
 
 
-def tabbed_pprint_representative(a_representative, num_tabs, small=False):
+def tabbed_pprint_representative(a_representative, num_tabs, items_to_skip, small=False):
     if not small:
         items = use_items(a_representative, ['send_time',
                                             'send_time_min',
@@ -574,6 +578,7 @@ def print_formatted(text, string_type=QType.NONE, colored_output=False):
     print(format_string(text, string_type, colored_output))
 
 
+# not used..
 def print_colored(text, a_color=None):
     if not a_color:
         strn = color_string(text, colored_output=True)
