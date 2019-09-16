@@ -4,30 +4,32 @@ The CompuRacer toolset for detection and exploitation of race conditions in web 
 The toolset can be split in three separate parts: Core application in `CompuRacerCore`, Burp extension in `CompuRacerExtensionBurp` and browser extensions (Chrome & Firefox) in `CompuRacerExtensionChrome` and `CompuRacerExtensionFirefox`. The `TestWebAppVouchers` folder contains a Flask test web app for voucher redemption that contains race conditions.
 
 ## Recommended software versions
-The toolset has been tested with Python 3.7, Firefox v. 65, Chrome v. 72, Burp Suite Professional v1.7.37 and Vagrant 2.1.5. It is run on a MacBook Pro (late 2013) running macOS High Sierra. Every individual tool is expected to be compatible with Linux and Windows as well, but this is not tested. The plugin is also expected to work in Burp Suite CE.
+The toolset has been tested with Python 3.7, Firefox v. 69, Chrome v. 76, Burp Suite Professional v1.7.37 & v2.1.03 and Vagrant 2.1.5. It is run on a MacBook Pro (2018) running macOS Mojave. Every individual tool is expected to be compatible with both Linux and Windows, but this is not fully tested. The plugin is also expected to work in Burp Suite CE.
 
 ## Installation
 #### Clone the repository
 `$ git clone https://github.com/rvemous/CompuRacer`
 #### Install CompuRacer Core dependencies
 * Go to the [`CompuRacer_Core/`](CompuRacer_Core/) folder.
-* Run: `$ pip install -r requirements.txt`  
-#### Install CompuRacer Firefox extension <br>
+* Run: `$ pip3 install -r requirements.txt`  
+#### Install CompuRacer Burp Suite extension
+* First, download the Jython standalone JAR file at https://www.jython.org/download and install the Requests library dependancy using: `$ pip3 install requests`.
+* In the Burp Suite, go to: Extender > Options > Python Environment and select the downloaded JAR file.
+* Then, point to the folder where the Requests library is installed. On a mac, this is probably: `/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages`.
+* Then, go to: Extender > Extensions > Add and select `Python` as the extension type.
+* Regarding the extension file, go to the [`CompuRacer_Extensions/Burp/`](CompuRacer_Extensions/Burp/) folder and select: `compu_racer_extension_burp.py`.
+* Click 'next' and after loading the extension, close the window.
+#### Install CompuRacer Firefox extension (optional) 
 Firefox does not support adding extensions permanently if they are not signed by Mozilla. You can add it temporarily (until the next restart), using the following method:
 * In Firefox, go to: Settings > Add-ons.
 * Click the gear icon and select: `Debug Add-ons`.
 * Go the [`CompuRacer_Extensions/Browser/Firefox/`](CompuRacer_Extensions/Browser/Firefox/) folder and select: `manifest.json`.
-#### Install CompuRacer Chrome extension <br>
-Note that due to recent changes in Chrome (after version 71), this extension will no longer send most of the headers to the CompuRacer. Therefore, in any authenticated session, it no longer works. You can add the extension using the following method:
+#### Install CompuRacer Chrome extension (optional) 
+Note that due to recent changes in Chrome (after version 71), this extension will no longer send most of the headers to the CompuRacer. Therefore, in any authenticated session, it no longer works. You can still add the extension using the following method:
 * In Chrome, go to: Settings > More Tools > Extensions.
 * Click: `Load unpacked`.
 * Select the [`CompuRacer_Extensions/Browser/Chrome/`](CompuRacer_Extensions/Browser/Chrome/) folder.
-#### Install CompuRacer Burp Suite extension
-* In the Burp Suite, go to: Extender > Add.
-* Select `Python` as the extension type.
-* Go to the [`CompuRacer_Extensions/Burp/`](CompuRacer_Extensions/Burp/) folder and select: `compu_racer_extension_burp.py`.
-* Click 'next' and after loading the extension, close the window.
-#### Install test web app for voucher redemption
+#### Install test web app for voucher redemption (optional)
 * In a terminal, go to the [`TestWebAppVouchers/app/`](TestWebAppVouchers/app/) folder.
 * Run the following command: `vagrant up`.
 
@@ -45,4 +47,4 @@ An elaborate manual on how to use the toolset can be found in [`CompuRacer_Manua
 All extensions can be reloaded (or re-installed) if they stop working for one reason or another. All platforms support some form of (live) debugging of extensions. Report any found issues (and solutions) and these will be added here. 
 
 ### References
-<b id="f1">1: </b>The toolset is a result of the master thesis "Towards Systematic Black-Box Testing for Exploitable Race Conditions in Web Apps" [↩](#a1) 
+<b id="f1">1: </b>Version 1.0 of the toolset is a result of the master thesis "Towards Systematic Black-Box Testing for Exploitable Race Conditions in Web Apps" [↩](#a1) 
