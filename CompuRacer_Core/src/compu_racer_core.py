@@ -71,7 +71,7 @@ class CompuRacer:
     """
 
     # -------------- String constants -------------- #
-    CLIENT_VERSION = "1.0"
+    CLIENT_VERSION = "1.1"
     CLIENT_FILE_lOC = "state/"
     CLIENT_CONFIG = CLIENT_FILE_lOC + "state.json"
     CLIENT_BACKUP = CLIENT_FILE_lOC + "state.json.backup"
