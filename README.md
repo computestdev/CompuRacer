@@ -4,7 +4,7 @@ The CompuRacer toolset for detection and exploitation of race conditions in web 
 The toolset can be split in three separate parts: Core application in `CompuRacerCore`, Burp extension in `CompuRacerExtensionBurp` and browser extensions (Chrome & Firefox) in `CompuRacerExtensionChrome` and `CompuRacerExtensionFirefox`. The `TestWebAppVouchers` folder contains a Flask test web app for voucher redemption that contains race conditions.
 
 ## Recommended software versions
-The toolset has been tested with Python 3.7, Firefox v. 69, Chrome v. 76, Burp Suite Professional v1.7.37 & v2.1.03 and Vagrant 2.1.5. It is run on a MacBook Pro (2018) running macOS Mojave. Every individual tool is expected to be compatible with both Linux and Windows, but this is not fully tested. The plugin is also expected to work in Burp Suite CE.
+The toolset is only compatible with Python 3.7. It has been tested using Burp Suite Professional v1.7.37 & v2.1.03, Firefox v. 69, Chrome v. 76 and Vagrant 2.1.5. It is tested on a MacBook Pro (2018) running macOS Mojave. Every individual tool is expected to be compatible with both Linux and Windows, but this is not fully tested. The Burp Suite plugin is also expected to work in the community version.
 
 ## Installation
 #### Clone the repository
