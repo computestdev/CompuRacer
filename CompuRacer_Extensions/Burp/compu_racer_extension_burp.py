@@ -221,8 +221,8 @@ def make_request(method, url, headers, body, timeout):
 
 
 class BurpExtender(IBurpExtender, IExtensionStateListener):
-    ext_name = "RaceConditionTester"
-    ext_version = '0.1'
+    ext_name = "CompuRacerExtension"
+    ext_version = '1.1'
     loaded = True
     t = None
 
