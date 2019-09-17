@@ -38,7 +38,7 @@ The Firefox, Chrome, Burp Suite extensions and test web app do not need any conf
 
 ## Running
 The Firefox, Chrome, Burp Suite extensions and test web app are already started after the install. The Computest Core can be started by running the following command within the `CompuRacer_Core` folder: <br>
-`$ python3.7 main.py`
+`$ python3.7 main.py [-h] [--port [PORT]] [--proxy [PROXY]]`
 
 ## How to use
 An elaborate manual on how to use the toolset can be found in [`CompuRacer_Manual.pdf`](CompuRacer_Manual.pdf).
