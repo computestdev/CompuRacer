@@ -8,7 +8,7 @@ The toolset is only compatible with Python 3.7. It has been tested using Burp Su
 
 ## Installation
 #### Clone the repository
-`$ git clone https://github.com/rvemous/CompuRacer`
+`$ git clone https://github.com/computestdev/CompuRacer`
 #### Install CompuRacer Core dependencies
 * Go to the [`CompuRacer_Core/`](CompuRacer_Core/) folder.
 * Run: `$ pip3 install -r requirements.txt`  
