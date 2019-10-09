@@ -169,7 +169,8 @@ class MenuFactory(IContextMenuFactory):
     @staticmethod
     def send_stored_requests_batched_to_racer(event):
         global _storedRequests
-        MenuFactory.send_requests_batched_to_racer(_storedRequests, True)
+        if _storedRequests is not None and _storedRequests:
+            MenuFactory.send_requests_batched_to_racer(_storedRequests, True)
 
     @staticmethod
     def send_requests_batched_to_racer(the_requests, resend=False):
@@ -495,6 +496,7 @@ class BurpExtender(IBurpExtender, IExtensionStateListener, ITab):
 
             self.button_resend_batch = JButton("Resend requests")
             self.button_resend_batch.setToolTipText("Resend all requests with the current configuration")
+            self.button_resend_batch.setEnabled(False)
             self.button_resend_batch.addActionListener(MenuFactory.start_request_transmitter_button)
             c.gridx = 3
             c.gridy = 0
