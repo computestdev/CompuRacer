@@ -26,23 +26,36 @@ import base64
 import threading
 import time
 import json
-#import http.client as client
-#import urllib
+import traceback
+
 import requests
 
-from javax.swing import JMenu, JMenuItem, JCheckBoxMenuItem, JOptionPane, JLabel, ImageIcon
-from burp import IBurpExtender, IHttpRequestResponse, IResponseInfo, IContextMenuFactory, IContextMenuInvocation, \
+from java.lang import RuntimeException, Object
+from java.awt import Dimension, GridLayout, GridBagLayout, GridBagConstraints, BorderLayout, FlowLayout, Insets
+from javax.swing import JFrame, JPanel, JTabbedPane, JScrollPane, JSplitPane, JMenu, JMenuItem, JCheckBoxMenuItem, JOptionPane, JLabel, ImageIcon, JCheckBox, JTextField, JComboBox
+from burp import ITab, IMessageEditorController, IBurpExtender, IHttpRequestResponse, IResponseInfo, IContextMenuFactory, IContextMenuInvocation, \
     IExtensionStateListener
-from java.net import URL, URI
+from org.python.core import PyException
 
 # --- Configuration --- #
 compuRacer_ip = '127.0.0.1'
 compuRacer_port = '8099'
 add_request_path = 'add_requests'
+immediate_data_path = 'immediate_data'
+immediate_results_path = 'immediate_results'
 alive_check_path = ''
 
 racer_alive = False
+DEFAULT_RESULTS = '> No results yet, so please send a request! :)'
+ADDITIONAL_SEND_TIMEOUT_WAIT = 5
+immediate_data = {'mode': 'off', 'settings': [10, 1, False, False, 20], 'results': DEFAULT_RESULTS}
+immediate_data_ui_elements = {'parallel_requests': None, 'allow_redirects': None, 'sync_last_byte': None, 'send_timeout': None}
 
+_textEditors = []
+_requestViewer = None
+_storedRequest = None
+
+compuracer_communication_lock = threading.Lock()
 
 class Cb:
     callbacks = None
@@ -58,11 +71,10 @@ class MenuFactory(IContextMenuFactory):
     def __init__(self):
         self.invoker = None
         self.messages = None
-        self.send_lock = threading.Lock()
         # self.load_icon()
 
     def createMenuItems(self, invoker):
-
+        global immediate_data, compuracer_communication_lock
         self.invoker = invoker
 
         if not (invoker.getInvocationContext() == IContextMenuInvocation.CONTEXT_MESSAGE_EDITOR_REQUEST or
@@ -82,25 +94,106 @@ class MenuFactory(IContextMenuFactory):
         global racer_alive
         if not racer_alive:
             button_text += " (offline)"
-        elif self.send_lock.locked():
+        elif compuracer_communication_lock.locked():
             button_text += " (busy)"
-        menu_send = JMenuItem(
-            button_text, actionPerformed=self.start_request_transmitter)
+        send_menu = JMenuItem(button_text, actionPerformed=self.start_request_transmitter)
+        option_menu = JCheckBoxMenuItem("Immediate mode", actionPerformed=self.mode_changed)
+        option_menu.setSelected(immediate_data['mode'] == 'on')
         # self.set_icon(menu_send)
-        menu_send.setEnabled(racer_alive and not self.send_lock.locked())
-        return [menu_send]
+        send_menu.setEnabled(racer_alive and not compuracer_communication_lock.locked())
+        option_menu.setEnabled(racer_alive and not compuracer_communication_lock.locked())
+        return [send_menu, option_menu]
 
     def start_request_transmitter(self, event):
         t = threading.Thread(name='Request transmitter', target=self.send_requests_batched_to_racer,
                              args=(self.messages,))
         t.start()
 
-    def send_requests_batched_to_racer(self, requests):
-        with self.send_lock:
-            for i in range(0, len(requests), 50):
-                end = min(i + 50, len(requests))
-                self.send_requests_to_racer(requests[i:end])
-            print("> Done sending {} request(s) to racer.".format(len(requests)))
+    def mode_changed(self, event):
+        global immediate_data, compuracer_communication_lock
+        is_selected = self.button_selected(event)
+        if is_selected != (immediate_data['mode'] == 'on'):
+            with compuracer_communication_lock:
+                if is_selected:
+                    new_mode = 'on'
+                else:
+                    new_mode = 'off'
+                if MenuFactory.set_immediate_mode_settings({'mode': new_mode}):
+                    immediate_data['mode'] = new_mode
+                    print("> Immediate mode enabled = {}".format(is_selected))
+                else:
+                    print("> Failed to enable immediate mode!")
+
+    def set_same_result_messages(self, message, add_newline=True):
+        global _textEditors
+        if add_newline:
+            message = "\n" + message
+        for _textEditor in _textEditors:
+            _textEditor.setText(str.encode(message))
+
+    def set_result_messages(self, messages, add_newline=True):
+        global _textEditors
+        addition = ""
+        if add_newline:
+            addition = "\n"
+        for i, _textEditor in enumerate(_textEditors):
+            _textEditor.setText(str.encode(addition + messages[i]))
+
+    def send_requests_batched_to_racer(self, the_requests):
+        global _requestViewer, _textEditors, _storedRequest, \
+            ADDITIONAL_SEND_TIMEOUT_WAIT, compuracer_communication_lock
+        print("1")
+        immediate_data_ui_elements["parallel_requests"].setEnabled(False)
+        immediate_data_ui_elements["allow_redirects"].setEnabled(False)
+        immediate_data_ui_elements["sync_last_byte"].setEnabled(False)
+        immediate_data_ui_elements["send_timeout"].setEnabled(False)
+        try:
+            if _storedRequest is None or _storedRequest.getRequest() != the_requests[0].getRequest():
+                if _storedRequest:
+                    print(_storedRequest.getRequest())
+                _requestViewer.setMessage(the_requests[0].getRequest(), True)
+                _storedRequest = the_requests[0]
+
+        except Exception as e:
+            print(e)
+        print("2")
+        with compuracer_communication_lock:
+            self.set_same_result_messages("> Sending request(s) to CompuRacer..")
+            for i in range(0, len(the_requests), 50):
+                end = min(i + 50, len(the_requests))
+                MenuFactory.send_requests_to_racer(the_requests[i:end])
+            print("> Done sending {} request(s) to racer.".format(len(the_requests)))
+            if immediate_data['mode'] == 'on':
+                time.sleep(3)
+                print("> Fetching results..")
+                self.set_same_result_messages("> Fetching result(s) from CompuRacer..")
+                got_results = False
+                # wait the send timeout + ADDITIONAL_SEND_TIMEOUT_WAIT seconds
+                end_time = time.time() + immediate_data['settings'][4] + ADDITIONAL_SEND_TIMEOUT_WAIT
+                try:
+                    while not got_results and time.time() < end_time:
+                        success, results = MenuFactory.get_immediate_mode_results()
+                        if success and results is not None and 'No results' not in results[0]:
+                            # set summary, full results and config
+                            self.set_result_messages(results)
+                            print("4")
+                            got_results = True
+
+                        time.sleep(1)
+                except Exception as e:
+                    print(e)
+                if not got_results:
+                    self.set_same_result_messages("> No results due to a timeout."
+                                                  "\n> Please increase the send timeout and try again.")
+
+            else:
+                self.set_same_result_messages("> The request is not send, so no results can be shown.\n"
+                                              "Enable the immediate mode and send it again.")
+        immediate_data_ui_elements["parallel_requests"].setEnabled(True)
+        immediate_data_ui_elements["allow_redirects"].setEnabled(True)
+        immediate_data_ui_elements["sync_last_byte"].setEnabled(True)
+        immediate_data_ui_elements["send_timeout"].setEnabled(True)
+
 
     # does not work..
     def load_icon(self):
@@ -124,6 +217,85 @@ class MenuFactory(IContextMenuFactory):
             print("Failed! {}".format(e))
 
     @staticmethod
+    def button_selected(event):
+        button = event.getSource()
+        return bool(button.getModel().isSelected())
+
+    @staticmethod
+    def item_selected(event):
+        button = event.getSource()
+        return int(str(button.getSelectedItem()))
+
+    @staticmethod
+    def get_immediate_mode_results():
+        success = False
+        results = None
+        try:
+            response = requests.get(url="http://{}:{}/{}".format(compuRacer_ip, compuRacer_port, immediate_results_path),
+                                    timeout=5)
+        except Exception as e:
+            print("Oh noo:")
+            print(e)
+        else:
+            # print("> Got response: {}\n".format(response.status_code))
+            if int(response.status_code) < 300:
+                if 'results' in response.json():
+                    if response.json()[u'results'] is not None:
+                        results = []
+                        for item in response.json()[u'results']:
+                            results.append(item.encode('ascii'))
+                    else:
+                        results = None
+                    success = True
+            else:
+                print("> Failed to get immediate results!\n")
+        return success, results
+
+    @staticmethod
+    def get_immediate_mode_settings():
+        success = False
+        mode = None
+        settings = None
+        try:
+            response = requests.get(url="http://{}:{}/{}".format(compuRacer_ip, compuRacer_port, immediate_data_path),
+                                    timeout=5)
+        except Exception as e:
+            print("Oh noo:")
+            print(e)
+        else:
+            # print("> Got response: {}\n".format(response.status_code))
+            if int(response.status_code) < 300:
+                mode = response.json()[u'mode']
+                settings = response.json()[u'settings']
+                success = True
+            else:
+                print("> Failed to get immediate data!\n")
+        return success, mode, settings
+
+
+    @staticmethod
+    def set_immediate_mode_settings(immediate_data):
+        print("> Setting immediate data: {}..".format(immediate_data))
+        success = False
+        try:
+            response_str = requests.post(url="http://{}:{}/{}".format(compuRacer_ip, compuRacer_port, immediate_data_path),
+                                         json=immediate_data,
+                                         timeout=5
+                                         ).status_code
+        except Exception as e:
+            print("Oh noo:")
+            print(e)
+        else:
+            print("> Got response: {}\n".format(response_str))
+            if int(response_str) < 300:
+                print("> Success in settings immediate data.")
+                success = True
+            else:
+                print("> Failed to set immediate data")
+        return success
+
+
+    @staticmethod
     def send_requests_to_racer(the_requests):
         print("> Sending {} request(s) to racer..".format(len(the_requests)))
         # header for request to racer
@@ -133,9 +305,7 @@ class MenuFactory(IContextMenuFactory):
                            "Accept: */*",
                            "Connection: close",
                            "Content-Type: application/json",
-                           # "X-Requested-With: Burp extension"
                            ]  # it auto-generates the content-length header
-        request_headers_dict = {header.split(": ")[0]: header.split(": ")[1] for header in request_headers[1:]}
         print(request_headers)
         # build header and json body of sub-request
         total_body = {'requests': []}
@@ -177,52 +347,50 @@ class MenuFactory(IContextMenuFactory):
         total_body_bytes = Cb.helpers.stringToBytes(json.dumps(total_body))
         print('Requests: ', len(total_body['requests']), ' body: ', len(total_body_bytes), 'bytes')
 
-        # This approach uses the SOCKS proxy:
-        # request = Cb.helpers.buildHttpMessage(request_headers, total_body_bytes)
         print("> Sending requests: \n{}\n".format(request_headers[0]))
         try:
-            #response_str = make_request(method="POST",
-            #                            url="http://{}:{}/{}".format(compuRacer_ip, compuRacer_port, add_request_path),
-            #                            headers=request_headers_dict,
-            #                            body=total_body_bytes)
             response_str = requests.post(url="http://{}:{}/{}".format(compuRacer_ip, compuRacer_port, add_request_path),
                                          json=total_body,
                                          timeout=5
                                          ).status_code
-            # This approach uses the SOCKS proxy:
-            # response = Cb.callbacks.makeHttpRequest(
-            #    Cb.helpers.buildHttpService(compuRacer_ip, int(compuRacer_port), False), request)
         except Exception as e:
             print("Oh noo:")
             print(e)
-            return
-        # This approach uses the SOCKS proxy:
-        # response_str = Cb.helpers.bytesToString(response.getResponse())
-        print("> Got response: \n{}\n".format(response_str))
-        if not 200 <= int(response_str):  # Cb.helpers.analyzeResponse(response.getResponse()).getStatusCode() <= 299:
-            print("> Failed to send the_requests: {}".format(total_body))
         else:
-            print("> Done sending the_requests to racer!\n")
+            print("> Got response: \n{}\n".format(response_str))
+            if int(response_str) >= 300:
+                print("> Failed to send the_requests: {}".format(total_body))
+            else:
+                print("> Done sending the_requests to racer!\n")
 
 
-def make_request(method, url, headers, body, timeout):
-    try:
-        #conn = client.HTTPConnection(url.split("/")[0], timeout=timeout)
-        response = requests.request(method=method,
-                                    url="/".join(url.split("/")[1:]),
-                                    headers=headers,
-                                    body=body)
-        #response = conn.getresponse()
-    except Exception as e:
-        print(e)
-        return 400
-    else:
-        return response.status_code
+    @staticmethod
+    def make_request(method, url, headers, body, timeout):
+        try:
+            response = requests.request(method=method,
+                                        url="/".join(url.split("/")[1:]),
+                                        headers=headers,
+                                        body=body,
+                                        timeout=timeout)
+        except Exception as e:
+            print(e)
+            return 400
+        else:
+            return response.status_code
 
 
-class BurpExtender(IBurpExtender, IExtensionStateListener):
+class Item(Object):
+    def __init__(self, item):
+        self.key = item["key"]
+        self.name = item["name"]
+
+    def toString(self):
+        return self.name
+
+
+class BurpExtender(IBurpExtender, IExtensionStateListener, ITab, IMessageEditorController):
     ext_name = "CompuRacerExtension"
-    ext_version = '1.1'
+    ext_version = '1.2'
     loaded = True
     t = None
 
@@ -230,51 +398,250 @@ class BurpExtender(IBurpExtender, IExtensionStateListener):
         Cb(callbacks)
         Cb.callbacks.setExtensionName(self.ext_name)
 
+        try:
+            global compuracer_communication_lock
+
+            # option picker item objects (for Java compatibility)
+            item1 = {'key': 'item1', 'name': '2'}
+            item2 = {'key': 'item2', 'name': '3'}
+            item3 = {'key': 'item3', 'name': '4'}
+            item4 = {'key': 'item4', 'name': '5'}
+            item5 = {'key': 'item5', 'name': '10'}
+            item6 = {'key': 'item6', 'name': '15'}
+            item7 = {'key': 'item7', 'name': '20'}
+            item8 = {'key': 'item8', 'name': '25'}
+            item9 = {'key': 'item9', 'name': '50'}
+            item10 = {'key': 'item10', 'name': '100'}
+
+            # main splitted pane + top pane
+            self._main_splitpane = JSplitPane(JSplitPane.VERTICAL_SPLIT)
+            self._outer_settings_pane = JPanel(BorderLayout())
+            self._settings_pane = JPanel(GridBagLayout())
+            c = GridBagConstraints()
+
+            self.label_1 = JLabel("Number of parallel requests:")
+            c.fill = GridBagConstraints.NONE
+            c.gridx = 0
+            c.gridy = 0
+            c.insets = Insets(0, 5, 0, 10)
+            c.anchor = GridBagConstraints.LINE_START
+            self._settings_pane.add(self.label_1, c)
+
+            self.input_parallel_requests = JComboBox([Item(item1), Item(item2), Item(item3), Item(item4), Item(item5), Item(item6),
+                                   Item(item7), Item(item8), Item(item9), Item(item10)])
+            self.input_parallel_requests.setSelectedIndex(4)
+            self.input_parallel_requests.setToolTipText("Select the number of parallel requests that will be sent")
+            self.input_parallel_requests.addActionListener(self.change_parallel_requests)
+            c.gridx = 1
+            c.gridy = 0
+            c.insets = Insets(0, 5, 0, 10)
+            self._settings_pane.add(self.input_parallel_requests, c)
+
+            self.option_allow_redirects = JCheckBox("Allow redirects", actionPerformed=self.check_allow_redirects)
+            self.option_allow_redirects.setToolTipText("Select whether redirect responses are followed")
+            c.gridx = 2
+            c.gridy = 0
+            c.insets = Insets(0, 20, 0, 10)
+            self._settings_pane.add(self.option_allow_redirects, c)
+
+            self.option_sync_last_byte = JCheckBox("Sync last byte", actionPerformed=self.check_sync_last_byte)
+            self.option_sync_last_byte.setToolTipText("Select whether last byte synchronisation is enabled")
+            c.gridx = 2
+            c.gridy = 1
+            c.insets = Insets(0, 20, 0, 0)
+            self._settings_pane.add(self.option_sync_last_byte, c)
+
+            self.label_2 = JLabel("Send timeout in seconds:")
+            c.gridx = 0
+            c.gridy = 1
+            c.insets = Insets(0, 5, 0, 0)
+            self._settings_pane.add(self.label_2, c)
+
+            self.input_send_timeout = JComboBox([Item(item2), Item(item4), Item(item5), Item(item7), Item(item9), Item(item10)])
+            self.input_send_timeout.setSelectedIndex(3)
+            self.input_send_timeout.setToolTipText("Select the wait-for-response timeout after sending the request(s)")
+            self.input_send_timeout.addActionListener(self.change_send_timeout)
+            c.gridx = 1
+            c.gridy = 1
+            c.insets = Insets(0, 5, 0, 0)
+            self._settings_pane.add(self.input_send_timeout, c)
+
+            immediate_data_ui_elements["parallel_requests"] = self.input_parallel_requests
+            immediate_data_ui_elements["allow_redirects"] = self.option_allow_redirects
+            immediate_data_ui_elements["sync_last_byte"] = self.option_sync_last_byte
+            immediate_data_ui_elements["send_timeout"] = self.input_send_timeout
+
+            c = GridBagConstraints()
+            c.anchor = GridBagConstraints.WEST
+            self._outer_settings_pane.add(self._settings_pane, BorderLayout.WEST)
+            self._main_splitpane.setTopComponent(self._outer_settings_pane)
+
+            self._results_splitpane = JSplitPane(JSplitPane.HORIZONTAL_SPLIT)
+            self._main_splitpane.setBottomComponent(self._results_splitpane)
+
+            # table of log entries
+            self.tabs_right = JTabbedPane()
+            global _textEditors, DEFAULT_RESULTS
+            for i in range(3):
+                _textEditors.append(Cb.callbacks.createTextEditor())
+                _textEditors[-1].setText(str.encode("\n" + DEFAULT_RESULTS))
+
+            self.tabs_right.add("Summary", _textEditors[0].getComponent())
+            self.tabs_right.add("Full result", _textEditors[1].getComponent())
+            self.tabs_right.add("Config", _textEditors[2].getComponent())
+            self._results_splitpane.setRightComponent(self.tabs_right)
+
+            # tabs with request/response viewers
+            self.tabs_left = JTabbedPane()
+            global _requestViewer
+            _requestViewer = Cb.callbacks.createMessageEditor(self, True)
+            self.tabs_left.addTab("Request", _requestViewer.getComponent())
+            self._results_splitpane.setLeftComponent(self.tabs_left)
+
+            # customize our UI components
+            Cb.callbacks.customizeUiComponent(self._settings_pane)
+            Cb.callbacks.customizeUiComponent(self.tabs_right)
+            Cb.callbacks.customizeUiComponent(self.tabs_left)
+
+            # add the custom tab to Burp's UI
+            Cb.callbacks.addSuiteTab(self)
+
+        except RuntimeException as e:
+            callbacks.printError(traceback.format_exc())
+            e = PyException(e)
+            print("10")
+            print(str(self))
+            print("{}\t{}\n{}\n".format(e.type, e.value, e.traceback))
         Cb.callbacks.registerContextMenuFactory(MenuFactory())
         callbacks.registerExtensionStateListener(self)
 
         self.start_alive_checker()
 
-        Cb.callbacks.printOutput('%s v%s extension loaded' % (
+        Cb.callbacks.printOutput('%s v%s extension loaded\n' % (
             self.ext_name, self.ext_version))
+
+    def change_parallel_requests(self, event):
+        global immediate_data
+        try:
+            num_parallel = MenuFactory.item_selected(event)
+            if num_parallel != immediate_data['settings'][0]:
+                self.update_setting(0, num_parallel, "number of parallel requests")
+        except Exception as e:
+            print(e)
+
+    def change_send_timeout(self, event):
+        global immediate_data
+        try:
+            send_timeout = MenuFactory.item_selected(event)
+            if send_timeout != immediate_data['settings'][4]:
+                self.update_setting(4, send_timeout, "send timeout")
+        except Exception as e:
+            print(e)
+
+    def check_allow_redirects(self, event):
+        global immediate_data
+        is_selected = MenuFactory.button_selected(event)
+        if is_selected != immediate_data['settings'][2]:
+            self.update_setting(2, is_selected, "allow redirects")
+
+    def check_sync_last_byte(self, event):
+        global immediate_data
+        is_selected = MenuFactory.button_selected(event)
+        if is_selected != immediate_data['settings'][3]:
+            self.update_setting(3, is_selected, "allow redirects")
+
+    # helper method for two methods above
+    def update_setting(self, index, new_value, text):
+        global immediate_data
+        success = True
+        print("> Updating {}..".format(text))
+        old_value = immediate_data['settings'][index]
+        immediate_data['settings'][index] = new_value
+        if MenuFactory.set_immediate_mode_settings({'settings': immediate_data['settings']}):
+            print("> Success!")
+        else:
+            print("> Failed!")
+            immediate_data['settings'][index] = old_value
+            success = False
+        return success
+
+    # for ITab
+    def getTabCaption(self):
+        return "CompuRacer"
+
+    # for ITab
+    def getUiComponent(self):
+        return self._main_splitpane
+
+    def getHttpService(self):
+        global _storedRequest
+        return _storedRequest.getHttpService()
+
+    def getRequest(self):
+        global _storedRequest
+        return _storedRequest.getRequest()
+
+    def getResponse(self):
+        global _storedRequest
+        return _storedRequest.getResponse()
 
     def start_alive_checker(self):
         self.t = threading.Thread(name='Alive checker', target=self.alive_checker)
         self.t.start()
 
+    def closest_match(self, number, list_of_numbers):
+        return min(list(zip(list_of_numbers, range(len(list_of_numbers)))),
+                   key=lambda item: (abs(item[0] - number), item[1]))
+
     def alive_checker(self):
-        global compuRacer_ip, compuRacer_port, alive_check_path, racer_alive
-        request = Cb.helpers.buildHttpRequest(
-            URL("http://{}:{}/{}".format(compuRacer_ip, compuRacer_port, alive_check_path)))
-        service = Cb.helpers.buildHttpService(compuRacer_ip, int(compuRacer_port), False)
+        global compuRacer_ip, compuRacer_port, alive_check_path, racer_alive, immediate_mode, compuracer_communication_lock
         unloaded = False
         old_alive = racer_alive
+        parallel_req_options = [2, 3, 4, 5, 10, 15, 20, 25, 50, 100]
+        send_time_options = [3, 5, 10, 20, 50, 100]
         while not unloaded:
             try:
-                # This approach uses the SOCKS proxy:
-                # response = Cb.callbacks.makeHttpRequest(service, request)
-                response = requests.get("http://{}:{}/{}".format(compuRacer_ip, compuRacer_port, alive_check_path),
-                                        timeout=2)
-                if response and response.status_code:  # response.getResponse():
-                    racer_alive = response.status_code == 200  # Cb.helpers.analyzeResponse(response.getResponse()).getStatusCode() == 200
-                else:
-                    # not response --> failed
-                    racer_alive = False
+                with compuracer_communication_lock:
+                    response = requests.get("http://{}:{}/{}".format(compuRacer_ip, compuRacer_port, alive_check_path),
+                                            timeout=2)
+                    racer_alive = response and response.status_code and response.status_code == 200
+                    success, mode, settings = MenuFactory.get_immediate_mode_settings()
+                    if success:
+                        immediate_data['mode'] = mode
+                        immediate_data['settings'] = settings
+
+                        # update UI button states
+                        immediate_data_ui_elements["parallel_requests"].setSelectedIndex(
+                            self.closest_match(immediate_data['settings'][0], parallel_req_options)[1])
+                        immediate_data_ui_elements["allow_redirects"].setSelected(bool(immediate_data['settings'][2]))
+                        immediate_data_ui_elements["sync_last_byte"].setSelected(bool(immediate_data['settings'][3]))
+                        immediate_data_ui_elements["send_timeout"].setSelectedIndex(
+                            self.closest_match(immediate_data['settings'][4], send_time_options)[1])
+
             except Exception as e:
                 # it surely did not work
                 racer_alive = False
+                print(e)
             if racer_alive and not old_alive:
-                print("Racer is now alive!")
+                print("> Racer is now alive!")
+                immediate_data_ui_elements["parallel_requests"].setEnabled(True)
+                immediate_data_ui_elements["allow_redirects"].setEnabled(True)
+                immediate_data_ui_elements["sync_last_byte"].setEnabled(True)
+                immediate_data_ui_elements["send_timeout"].setEnabled(True)
                 old_alive = True
             elif not racer_alive and old_alive:
-                print("Racer became dead!")
+                print("> Racer became dead!")
+                immediate_data_ui_elements["parallel_requests"].setEnabled(False)
+                immediate_data_ui_elements["allow_redirects"].setEnabled(False)
+                immediate_data_ui_elements["sync_last_byte"].setEnabled(False)
+                immediate_data_ui_elements["send_timeout"].setEnabled(False)
                 old_alive = False
             time.sleep(5)
             if not self.loaded:
                 unloaded = True
 
     def extensionUnloaded(self):
-        print("Unloading..")
+        print("\n> Unloading..")
         self.loaded = False
         self.t.join()
-        print("Done.")
+        print("> Done.")

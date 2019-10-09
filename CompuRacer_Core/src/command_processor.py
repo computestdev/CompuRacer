@@ -36,7 +36,7 @@ class CommandProcessor:
     printing_queued = False
 
     last_print_time = -1
-    print_timeout_max = 10
+    print_timeout_max = 2
 
     last_execution = None
 

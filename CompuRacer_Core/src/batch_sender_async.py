@@ -237,7 +237,7 @@ async def run(batch, requests, proxy):
             # send request
             # print(f"Sending ({values[1]}x): {utils.get_req_string(requests[key[0]], True, ['timestamp'])}")
             tasks.append(asyncio.ensure_future(__a_sup_request(key[0], a_prepared_request, wait_time,
-                                                               wait_until, values[1], 20, session)))
+                                                               wait_until, values[1], batch.get_send_timeout(), session)))
         # results = await asyncio.gather(*tasks)
         results = [await f for f in tqdm(asyncio.as_completed(tasks),
                                          total=len(tasks),

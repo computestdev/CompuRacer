@@ -36,11 +36,13 @@ class Batch:
         'compare': {}
     }
 
-    def __init__(self, name, rendered_file_dir, allow_redirects=False, sync_last_byte=False, custom_comparing=None):
+    def __init__(self, name, rendered_file_dir, allow_redirects=False,
+                 sync_last_byte=False, send_timeout=20, custom_comparing=None):
         self.name = name
         self.changed = False
         self.allow_redirects = allow_redirects
         self.sync_last_byte = sync_last_byte
+        self.send_timeout = send_timeout
         self.items = {}
         self.results = {}
         self.rendered_file_dir = rendered_file_dir
@@ -55,10 +57,13 @@ class Batch:
             a_dict['custom_comparing'] = copy.deepcopy(Batch.default_custom_comparing)
         if 'sync_last_byte' not in a_dict:
             a_dict['sync_last_byte'] = False
+        if 'send_timeout' not in a_dict:
+            a_dict['send_timeout'] = 20
         a_batch = Batch(name=a_dict['name'],
                         rendered_file_dir=rendered_file_dir,
                         allow_redirects=a_dict['allow_redirects'],
                         sync_last_byte=a_dict['sync_last_byte'],
+                        send_timeout=a_dict['send_timeout'],
                         custom_comparing=a_dict['custom_comparing'])
         a_batch.results = a_dict['results']
         # convert older saves of results
@@ -80,6 +85,7 @@ class Batch:
         return {'name': self.name,
                 'allow_redirects': self.allow_redirects,
                 'sync_last_byte': self.sync_last_byte,
+                'send_timeout': self.send_timeout,
                 'custom_comparing': self.custom_comparing,
                 'items': listed_items,
                 'results': self.results}
@@ -95,6 +101,13 @@ class Batch:
     def set_sync_last_byte(self, sync_last_byte):
         self.changed = True
         self.sync_last_byte = sync_last_byte
+
+    def get_send_timeout(self):
+        return self.send_timeout
+
+    def set_send_timeout(self, send_timeout):
+        self.changed = True
+        self.send_timeout = send_timeout
 
     def get_ignored_fields(self):
         return self.custom_comparing['ignore']

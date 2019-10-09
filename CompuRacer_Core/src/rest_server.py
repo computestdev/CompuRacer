@@ -8,6 +8,7 @@ It is also used to render HTTP responses.
 import datetime
 import logging
 import os
+import queue
 import threading
 import time
 from multiprocessing import Queue
@@ -24,6 +25,7 @@ log.disabled = True
 app.logger.disabled = True
 
 server_queue = Queue()
+immediate_data = {'mode': 'off', 'settings': [10, 1, False, False, 20], 'results': None}
 
 
 class RestServer:
@@ -38,14 +40,21 @@ class RestServer:
     allowed_x_req_with = ['Burp extension', 'Browser extension']
 
     server_process = None
+    message_receiver = None
 
-    def __init__(self, host=None, port=None, log_file=None):
+    message_queue = None
+
+    def __init__(self, the_immediate_mode, message_queue, host=None, port=None, log_file=None):
+        global immediate_data
+        immediate_data['mode'] = the_immediate_mode
+        self.message_queue = message_queue
         if host:
             self.host = host
         if port:
             self.port = port
         if log_file:
             self.log_file = log_file
+        self.allowed_hosts = [f"{host}:{port}", f"localhost:{port}"]
 
     def start(self, racer):
         racer.print_formatted("Starting REST server..", utils.QType.INFORMATION, True)
@@ -53,8 +62,13 @@ class RestServer:
         self.server_process = threading.Thread(name="REST server",
                                                target=self.__run_server,
                                                args=(self.host, self.port, self.log_file))
+        self.message_receiver = threading.Thread(name="Core message receiver",
+                                                 target=self.__core_message_fetcher,
+                                                 args=(self.message_queue,))
         self.server_process.setDaemon(True)
+        self.message_receiver.setDaemon(True)
         self.server_process.start()
+        self.message_receiver.start()
 
         # wait for the rest server to startup and produce output
         time.sleep(1)
@@ -62,6 +76,24 @@ class RestServer:
         racer.print_formatted("Done.", utils.QType.INFORMATION, True)
         global server_queue
         return server_queue
+
+    @staticmethod
+    def __core_message_fetcher(message_queue):
+        max_diff = 2
+        while True:
+            try:
+                new_item = message_queue.get(timeout=max_diff)
+                global immediate_data
+                if new_item['type'] == 'mode':
+                    immediate_data['mode'] = new_item['content']
+                elif new_item['type'] == 'settings':
+                    immediate_data['settings'] = new_item['content']
+                elif new_item['type'] == 'results':
+                    immediate_data['results'] = new_item['content']
+            except queue.Empty:
+                pass
+            except Exception as e:
+                print(e)
 
     @staticmethod
     def __run_server(the_host, the_port, the_log_file):
@@ -107,9 +139,10 @@ def get_ignore():
 def add_request():
     if not request.json:
         return jsonify_sc("No JSON embedded!", 400)
-    global server_queue
+    global server_queue, immediate_data
     json_dict = request.json
-    server_queue.put(parse_a_request(json_dict))
+    server_queue.put({'type': 'request', 'content': parse_a_request(json_dict)})
+    immediate_data['results'] = None
     return jsonify_sc("Success", 200)
 
 
@@ -119,11 +152,51 @@ def add_requests():
         return jsonify_sc("No JSON embedded!", 400)
     if 'requests' not in request.json:
         return jsonify_sc("No 'requests' key in JSON body!", 400)
-    global server_queue
+    global server_queue, immediate_data
     json_dict = request.json
     for a_request in json_dict['requests']:
-        server_queue.put(parse_a_request(a_request))
+        server_queue.put({'type': 'request', 'content': parse_a_request(a_request)})
+    immediate_data['results'] = None
     return jsonify_sc("Success", 200)
+
+
+@app.route("/immediate_data", methods=['GET', 'POST'])
+def immediate_config():
+    global immediate_data
+    if request.method == "GET":
+        return jsonify_sc({'mode': immediate_data['mode'], 'settings': immediate_data['settings']}, 200)
+    elif request.method == "POST":
+        if not request.json:
+            return jsonify_sc("No JSON embedded!", 400)
+        global server_queue
+        if 'mode' in request.json:
+            immediate_data['mode'] = request.json['mode']
+            server_queue.put({'type': 'mode', 'content': immediate_data['mode']})
+        if 'settings' in request.json:
+            # check whether all settings elements are of the right type and the duplication amount is not too high
+            if not matching_types(request.json['settings'], [int, int, bool, bool, int]) \
+                    or request.json['settings'][0] * request.json['settings'][1] > 1000:
+                return jsonify_sc("Invalid settings", 400)
+            immediate_data['settings'] = request.json['settings']
+            server_queue.put({'type': 'settings', 'content': immediate_data['settings']})
+        return jsonify_sc("Success", 200)
+    return jsonify_sc("Not found", 404)
+
+
+def matching_types(data, types):
+    if types is None or data is None or len(types) != len(data):
+        return False
+    match = True
+    for i, item in enumerate(data):
+        if type(item) != types[i]:
+            match = False
+    return match
+
+
+@app.route("/immediate_results", methods=['GET'])
+def access_mode():
+    global immediate_data
+    return jsonify_sc({'results': immediate_data['results']}, 200)
 
 
 @app.route("/responses/<string:filename>", methods=['GET'])
