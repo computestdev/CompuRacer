@@ -32,7 +32,7 @@ import requests
 
 from java.lang import RuntimeException, Object
 from java.awt import Dimension, GridLayout, GridBagLayout, GridBagConstraints, BorderLayout, FlowLayout, Insets
-from javax.swing import JFrame, JPanel, JTabbedPane, JScrollPane, JSplitPane, JMenu, JMenuItem, JCheckBoxMenuItem, JOptionPane, JLabel, ImageIcon, JCheckBox, JTextField, JComboBox
+from javax.swing import JFrame, JPanel, JTabbedPane, JScrollPane, JSplitPane, JMenu, JMenuItem, JCheckBoxMenuItem, JOptionPane, JLabel, ImageIcon, JCheckBox, JTextField, JComboBox, JButton
 from burp import ITab, IMessageEditorController, IBurpExtender, IHttpRequestResponse, IResponseInfo, IContextMenuFactory, IContextMenuInvocation, \
     IExtensionStateListener
 from org.python.core import PyException
@@ -52,8 +52,9 @@ immediate_data = {'mode': 'off', 'settings': [10, 1, False, False, 20], 'results
 immediate_data_ui_elements = {'parallel_requests': None, 'allow_redirects': None, 'sync_last_byte': None, 'send_timeout': None}
 
 _textEditors = []
-_requestViewer = None
-_storedRequest = None
+_requestViewers = []
+_requestPane = None
+_storedRequests = []
 
 compuracer_communication_lock = threading.Lock()
 
@@ -109,9 +110,10 @@ class MenuFactory(IContextMenuFactory):
                              args=(self.messages,))
         t.start()
 
-    def mode_changed(self, event):
+    @staticmethod
+    def mode_changed(event):
         global immediate_data, compuracer_communication_lock
-        is_selected = self.button_selected(event)
+        is_selected = MenuFactory.button_selected(event)
         if is_selected != (immediate_data['mode'] == 'on'):
             with compuracer_communication_lock:
                 if is_selected:
@@ -124,14 +126,16 @@ class MenuFactory(IContextMenuFactory):
                 else:
                     print("> Failed to enable immediate mode!")
 
-    def set_same_result_messages(self, message, add_newline=True):
+    @staticmethod
+    def set_same_result_messages(message, add_newline=True):
         global _textEditors
         if add_newline:
             message = "\n" + message
         for _textEditor in _textEditors:
             _textEditor.setText(str.encode(message))
 
-    def set_result_messages(self, messages, add_newline=True):
+    @staticmethod
+    def set_result_messages(messages, add_newline=True):
         global _textEditors
         addition = ""
         if add_newline:
@@ -139,26 +143,50 @@ class MenuFactory(IContextMenuFactory):
         for i, _textEditor in enumerate(_textEditors):
             _textEditor.setText(str.encode(addition + messages[i]))
 
-    def send_requests_batched_to_racer(self, the_requests):
-        global _requestViewer, _textEditors, _storedRequest, \
-            ADDITIONAL_SEND_TIMEOUT_WAIT, compuracer_communication_lock
-        print("1")
-        immediate_data_ui_elements["parallel_requests"].setEnabled(False)
-        immediate_data_ui_elements["allow_redirects"].setEnabled(False)
-        immediate_data_ui_elements["sync_last_byte"].setEnabled(False)
-        immediate_data_ui_elements["send_timeout"].setEnabled(False)
-        try:
-            if _storedRequest is None or _storedRequest.getRequest() != the_requests[0].getRequest():
-                if _storedRequest:
-                    print(_storedRequest.getRequest())
-                _requestViewer.setMessage(the_requests[0].getRequest(), True)
-                _storedRequest = the_requests[0]
+    @staticmethod
+    def set_state_of_all_buttons(enabled):
+        immediate_data_ui_elements["parallel_requests"].setEnabled(enabled)
+        immediate_data_ui_elements["allow_redirects"].setEnabled(enabled)
+        immediate_data_ui_elements["sync_last_byte"].setEnabled(enabled)
+        immediate_data_ui_elements["send_timeout"].setEnabled(enabled)
+        immediate_data_ui_elements["resend_batch"].setEnabled(enabled)
 
-        except Exception as e:
-            print(e)
+    @staticmethod
+    def reset_request_tabs(the_requests):
+        global _requestViewers, _requestPane
+        _requestPane.removeAll()
+        for i, request in enumerate(the_requests):
+            _requestViewers.append(Cb.callbacks.createMessageEditor(None, False))
+            _requestPane.addTab("Request {}".format(i), _requestViewers[-1].getComponent())
+            _requestViewers[-1].setMessage(request.getRequest(), True)
+
+    @staticmethod
+    def start_request_transmitter_button(event):
+        t = threading.Thread(name='Request transmitter', target=MenuFactory.send_stored_requests_batched_to_racer,
+                             args=(event,))
+        t.start()
+
+    @staticmethod
+    def send_stored_requests_batched_to_racer(event):
+        global _storedRequests
+        MenuFactory.send_requests_batched_to_racer(_storedRequests, True)
+
+    @staticmethod
+    def send_requests_batched_to_racer(the_requests, resend=False):
+        global _requestViewers, _textEditors, _storedRequests, \
+            ADDITIONAL_SEND_TIMEOUT_WAIT, compuracer_communication_lock
+
+        print("1")
+        MenuFactory.set_state_of_all_buttons(False)
+        if not resend:
+            try:
+                MenuFactory.reset_request_tabs(the_requests)
+                _storedRequests = the_requests
+            except Exception as e:
+                print(e)
         print("2")
         with compuracer_communication_lock:
-            self.set_same_result_messages("> Sending request(s) to CompuRacer..")
+            MenuFactory.set_same_result_messages("> Sending request(s) to CompuRacer..")
             for i in range(0, len(the_requests), 50):
                 end = min(i + 50, len(the_requests))
                 MenuFactory.send_requests_to_racer(the_requests[i:end])
@@ -166,7 +194,9 @@ class MenuFactory(IContextMenuFactory):
             if immediate_data['mode'] == 'on':
                 time.sleep(3)
                 print("> Fetching results..")
-                self.set_same_result_messages("> Fetching result(s) from CompuRacer..")
+                MenuFactory.set_same_result_messages(
+                    "> Fetching result(s) from CompuRacer.. (takes up to {} seconds)".format(
+                        immediate_data['settings'][4] + ADDITIONAL_SEND_TIMEOUT_WAIT))
                 got_results = False
                 # wait the send timeout + ADDITIONAL_SEND_TIMEOUT_WAIT seconds
                 end_time = time.time() + immediate_data['settings'][4] + ADDITIONAL_SEND_TIMEOUT_WAIT
@@ -175,7 +205,7 @@ class MenuFactory(IContextMenuFactory):
                         success, results = MenuFactory.get_immediate_mode_results()
                         if success and results is not None and 'No results' not in results[0]:
                             # set summary, full results and config
-                            self.set_result_messages(results)
+                            MenuFactory.set_result_messages(results)
                             print("4")
                             got_results = True
 
@@ -183,16 +213,13 @@ class MenuFactory(IContextMenuFactory):
                 except Exception as e:
                     print(e)
                 if not got_results:
-                    self.set_same_result_messages("> No results due to a timeout."
-                                                  "\n> Please increase the send timeout and try again.")
+                    MenuFactory.set_same_result_messages("> No results due to a timeout."
+                                                         "\n> Please increase the send timeout and try again.")
 
             else:
-                self.set_same_result_messages("> The request is not send, so no results can be shown.\n"
-                                              "Enable the immediate mode and send it again.")
-        immediate_data_ui_elements["parallel_requests"].setEnabled(True)
-        immediate_data_ui_elements["allow_redirects"].setEnabled(True)
-        immediate_data_ui_elements["sync_last_byte"].setEnabled(True)
-        immediate_data_ui_elements["send_timeout"].setEnabled(True)
+                MenuFactory.set_same_result_messages("> The request is not send, so no results can be shown.\n"
+                                                     "> Enable the immediate mode and send it again.")
+        MenuFactory.set_state_of_all_buttons(True)
 
 
     # does not work..
@@ -388,7 +415,7 @@ class Item(Object):
         return self.name
 
 
-class BurpExtender(IBurpExtender, IExtensionStateListener, ITab, IMessageEditorController):
+class BurpExtender(IBurpExtender, IExtensionStateListener, ITab):
     ext_name = "CompuRacerExtension"
     ext_version = '1.2'
     loaded = True
@@ -466,10 +493,19 @@ class BurpExtender(IBurpExtender, IExtensionStateListener, ITab, IMessageEditorC
             c.insets = Insets(0, 5, 0, 0)
             self._settings_pane.add(self.input_send_timeout, c)
 
+            self.button_resend_batch = JButton("Resend requests")
+            self.button_resend_batch.setToolTipText("Resend all requests with the current configuration")
+            self.button_resend_batch.addActionListener(MenuFactory.start_request_transmitter_button)
+            c.gridx = 3
+            c.gridy = 0
+            c.insets = Insets(0, 20, 0, 10)
+            self._settings_pane.add(self.button_resend_batch, c)
+
             immediate_data_ui_elements["parallel_requests"] = self.input_parallel_requests
             immediate_data_ui_elements["allow_redirects"] = self.option_allow_redirects
             immediate_data_ui_elements["sync_last_byte"] = self.option_sync_last_byte
             immediate_data_ui_elements["send_timeout"] = self.input_send_timeout
+            immediate_data_ui_elements["resend_batch"] = self.button_resend_batch
 
             c = GridBagConstraints()
             c.anchor = GridBagConstraints.WEST
@@ -492,16 +528,16 @@ class BurpExtender(IBurpExtender, IExtensionStateListener, ITab, IMessageEditorC
             self._results_splitpane.setRightComponent(self.tabs_right)
 
             # tabs with request/response viewers
-            self.tabs_left = JTabbedPane()
-            global _requestViewer
-            _requestViewer = Cb.callbacks.createMessageEditor(self, True)
-            self.tabs_left.addTab("Request", _requestViewer.getComponent())
-            self._results_splitpane.setLeftComponent(self.tabs_left)
+            global _requestViewers, _requestPane
+            _requestPane = JTabbedPane()
+            _requestViewers.append(Cb.callbacks.createMessageEditor(None, False))
+            _requestPane.addTab("Request", _requestViewers[-1].getComponent())
+            self._results_splitpane.setLeftComponent(_requestPane)
 
             # customize our UI components
             Cb.callbacks.customizeUiComponent(self._settings_pane)
             Cb.callbacks.customizeUiComponent(self.tabs_right)
-            Cb.callbacks.customizeUiComponent(self.tabs_left)
+            Cb.callbacks.customizeUiComponent(_requestPane)
 
             # add the custom tab to Burp's UI
             Cb.callbacks.addSuiteTab(self)
@@ -550,6 +586,11 @@ class BurpExtender(IBurpExtender, IExtensionStateListener, ITab, IMessageEditorC
         if is_selected != immediate_data['settings'][3]:
             self.update_setting(3, is_selected, "allow redirects")
 
+    def resend_batches(self, event):
+        global _storedRequests
+        if _storedRequests is not None:
+            self.sen
+
     # helper method for two methods above
     def update_setting(self, index, new_value, text):
         global immediate_data
@@ -573,17 +614,17 @@ class BurpExtender(IBurpExtender, IExtensionStateListener, ITab, IMessageEditorC
     def getUiComponent(self):
         return self._main_splitpane
 
-    def getHttpService(self):
-        global _storedRequest
-        return _storedRequest.getHttpService()
-
-    def getRequest(self):
-        global _storedRequest
-        return _storedRequest.getRequest()
-
-    def getResponse(self):
-        global _storedRequest
-        return _storedRequest.getResponse()
+    # def getHttpService(self):
+    #     global _storedRequest
+    #     return _storedRequest.getHttpService()
+    #
+    # def getRequest(self):
+    #     global _storedRequest
+    #     return _storedRequest.getRequest()
+    #
+    # def getResponse(self):
+    #     global _storedRequest
+    #     return _storedRequest.getResponse()
 
     def start_alive_checker(self):
         self.t = threading.Thread(name='Alive checker', target=self.alive_checker)
@@ -624,17 +665,11 @@ class BurpExtender(IBurpExtender, IExtensionStateListener, ITab, IMessageEditorC
                 print(e)
             if racer_alive and not old_alive:
                 print("> Racer is now alive!")
-                immediate_data_ui_elements["parallel_requests"].setEnabled(True)
-                immediate_data_ui_elements["allow_redirects"].setEnabled(True)
-                immediate_data_ui_elements["sync_last_byte"].setEnabled(True)
-                immediate_data_ui_elements["send_timeout"].setEnabled(True)
+                MenuFactory.set_state_of_all_buttons(True)
                 old_alive = True
             elif not racer_alive and old_alive:
                 print("> Racer became dead!")
-                immediate_data_ui_elements["parallel_requests"].setEnabled(False)
-                immediate_data_ui_elements["allow_redirects"].setEnabled(False)
-                immediate_data_ui_elements["sync_last_byte"].setEnabled(False)
-                immediate_data_ui_elements["send_timeout"].setEnabled(False)
+                MenuFactory.set_state_of_all_buttons(False)
                 old_alive = False
             time.sleep(5)
             if not self.loaded:

@@ -68,7 +68,13 @@ def __decode_response(response):
             # cannot decode it --> just past it in as is
             response['body'] = response['body_temp']
         else:
-            response['body'] = response['body_temp'].decode(encoding)
+            try:
+                response['body'] = response['body_temp'].decode(encoding)
+            except UnicodeDecodeError as _:
+                # Sometimes vague stuff happens like:
+                # "UnicodeDecodeError: 'charmap' codec can't decode byte
+                # 0x9d in position 966: character maps to <undefined>"
+                response['body'] = response['body_temp']
     del response['body_temp']
     return response
 
