@@ -15,7 +15,7 @@ The toolset is only compatible with Python 3.7. It has been tested using Burp Su
 #### Install CompuRacer Burp Suite extension
 * First, download the Jython standalone JAR file at https://www.jython.org/download and install the Requests library dependancy using: `$ pip3 install requests`.
 * In the Burp Suite, go to: Extender > Options > Python Environment and select the downloaded JAR file.
-* Then, point to the folder where the Requests library is installed. On a mac, this is probably: `/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages`.
+* Then, point to the folder where the Requests library is installed. On a mac, this is probably: `/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages` or `~/Library/Python/3.7/lib/python/site-packages`.
 * Next, go to: Extender > Extensions > Add and select `Python` as the extension type.
 * Regarding the extension file, go to the [`CompuRacer_Extensions/Burp/`](CompuRacer_Extensions/Burp/) folder and select: `compu_racer_extension_burp.py`.
 * Click 'next' and after loading the extension, close the window.
