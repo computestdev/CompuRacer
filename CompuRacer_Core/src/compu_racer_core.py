@@ -100,7 +100,7 @@ class CompuRacer:
     immediate_batch_name = "Imm"
     progress_bar_width = 100
 
-    def __init__(self, port, proxy, queue):
+    def __init__(self, port, proxy, queue, cli_check):
         """
         Creates a new CompuRacer instance
         :param queue: the queue to be used when we want to display a filepicker dialog to the user
@@ -109,6 +109,8 @@ class CompuRacer:
 
         # if the queue is None, we cannot and will not show dialogs
         self.dialog_queue = queue
+
+        self.cli_check = cli_check
 
         # add shutdown hooks
         signal.signal(signal.SIGINT, self.force_shutdown)
@@ -142,7 +144,8 @@ class CompuRacer:
             os.mkdir(self.CLIENT_BATCHES_LOC)
         else:
             time.sleep(0.25)
-            for file in tqdm(os.listdir(self.CLIENT_BATCHES_LOC), desc="Loading batches", ncols=self.progress_bar_width):
+            for file in tqdm(os.listdir(self.CLIENT_BATCHES_LOC), desc="Loading batches",
+                             ncols=self.progress_bar_width):
                 self.imp_batch_without_requests_by_name(self, self.CLIENT_BATCHES_LOC + file)
             time.sleep(0.25)
         self.print_formatted("Done.", utils.QType.INFORMATION)
@@ -198,7 +201,7 @@ class CompuRacer:
         if self.command_processor.is_changed():
             self.command_processor.set_changed(False)
 
-    def start(self):
+    def start(self, cli_check, racer):
         """
         Starts the CompuRacer
         """
@@ -221,9 +224,7 @@ class CompuRacer:
         self.print_formatted("Starting command processor..", utils.QType.INFORMATION)
         time.sleep(0.25)
         utils.clear_output()
-        self.command_processor.start()
-
-
+        self.command_processor.start(cli_check, racer, self.state)
 
     def comm_general_save(self, do_print=True):
         """
@@ -247,7 +248,8 @@ class CompuRacer:
         if not os.path.exists(self.CLIENT_BATCHES_LOC):
             os.mkdir(self.CLIENT_BATCHES_LOC)
         if 'batches' in self.state:
-            for batch_name in tqdm(list(self.state['batches'].keys()), desc="Storing batches", ncols=self.progress_bar_width):
+            for batch_name in tqdm(list(self.state['batches'].keys()), desc="Storing batches",
+                                   ncols=self.progress_bar_width):
                 if self.state['batches'][batch_name].changed:
                     saved_anything = True
                     self.state['batches'][batch_name].changed = False
@@ -351,7 +353,8 @@ class CompuRacer:
         }
 
     @staticmethod
-    def create_new_state(colored_output, the_requests=None, project_name="", batches=None, concepts=None, current_batch=None):
+    def create_new_state(colored_output, the_requests=None, project_name="", batches=None, concepts=None,
+                         current_batch=None):
         """
         Gets the a new state dictionary
         :param colored_output: if True, to colors the output
@@ -450,15 +453,18 @@ class CompuRacer:
                                            arg_spec_opt=[("Enable color", bool, True)]
                                            )
         self.command_processor.add_command(["s", "save"], self.comm_general_save, "Saves the current state.", self)
-        self.command_processor.add_command(["q", "quit"], self.comm_general_shutdown, "Saves the current state and shuts down the racer.", self)
+        self.command_processor.add_command(["q", "quit"], self.comm_general_shutdown,
+                                           "Saves the current state and shuts down the racer.", self)
 
     def add_commands_mode(self):
         """
         Adds all commands that are related to the immediate mode of the application
         """
         self.command_processor.add_command(["mode"], self.comm_mode_change,
-                                           "Sets the mode to add incoming requests to: the current batch, a new batch (and send it after 2 secs) or not at all.", self,
-                                           arg_spec_opt=[("Change immediate mode: 'off', 'curr' or 'on'", str, "* on: new batch and send mode *")]
+                                           "Sets the mode to add incoming requests to: the current batch, a new batch (and send it after 2 secs) or not at all.",
+                                           self,
+                                           arg_spec_opt=[("Change immediate mode: 'off', 'curr' or 'on'", str,
+                                                          "* on: new batch and send mode *")]
                                            )
         self.command_processor.add_command(["set mode"], self.comm_mode_set_settings,
                                            "Updates mode settings for parallel and sequential duplication.", self,
@@ -482,11 +488,15 @@ class CompuRacer:
                                            "Gets a sorted table of basic request info.", self,
                                            arg_spec_opt=[("First request ID", str, "* all requests *"),
                                                          ("Last request ID", str, "* only first request *"),
-                                                         (f"Sort order {[str(order) for order in SortOrder]}", SortOrder,
-                                                         "SortOrder.INDEX"), ("Sort in ascending order", bool, True)]
+                                                         (
+                                                             f"Sort order {[str(order) for order in SortOrder]}",
+                                                             SortOrder,
+                                                             "SortOrder.INDEX"),
+                                                         ("Sort in ascending order", bool, True)]
                                            )
         self.command_processor.add_command(["req"], self.comm_requests_get_one,
-                                           "Gets a specific request by ID. Getting newest request when no argments are provided.", self,
+                                           "Gets a specific request by ID. Getting newest request when no argments are provided.",
+                                           self,
                                            arg_spec_opt=[("Request ID", str, "* the most recently added request *")]
                                            )
         self.command_processor.add_command(["comp reqs"], self.comm_requests_comp,
@@ -513,16 +523,21 @@ class CompuRacer:
                                            arg_spec_opt=[("Index of the batch", int, "* the current batch *"),
                                                          ("Print result summary", bool, True)]
                                            )
-        self.command_processor.add_command(["add bs", "add batch"], self.comm_batches_create_new,
-                                           "Creates a new batch by name and sets it as current batch (must be unique)", self,
+        self.command_processor.add_command(["add bs", "add batch"], self.comm_batches_create_new_static,
+                                           "Creates a new batch by name and sets it as current batch (must be unique)",
+                                           self,
                                            arg_spec=[("Name of the batch", str)],
-                                           arg_spec_opt=[("If true, set new batch as current batch, else it keeps the current value", bool, True)]
+                                           arg_spec_opt=[(
+                                               "If true, set new batch as current batch, else it keeps the current value",
+                                               bool, True)]
                                            )
         self.command_processor.add_command(["get proj", "get project"], self.comm_batches_get_project,
-                                           "Gets the project name prefix with which all new batch names will begin.", self
+                                           "Gets the project name prefix with which all new batch names will begin.",
+                                           self
                                            )
         self.command_processor.add_command(["set proj", "set project"], self.comm_batches_set_project,
-                                           "Sets the project name prefix with which all new batch names will now begin: 'project_name'_<batch_name>", self,
+                                           "Sets the project name prefix with which all new batch names will now begin: 'project_name'_<batch_name>",
+                                           self,
                                            arg_spec_opt=[("Name of the project", str, "* Empty string *")]
                                            )
         self.command_processor.add_command(["bss", "ls", "dir", "batches"], self.comm_batches_info,
@@ -534,7 +549,9 @@ class CompuRacer:
         self.command_processor.add_command(["get cont"], self.comm_batches_get_contents,
                                            "Get batch by index and print batch contents summary", self,
                                            arg_spec=[("Index of the batch", int)],
-                                           arg_spec_opt=[("If true, get full batch contents (including ASCII timing-representation) else get summary", bool, False)]
+                                           arg_spec_opt=[(
+                                               "If true, get full batch contents (including ASCII timing-representation) else get summary",
+                                               bool, False)]
                                            )
         self.command_processor.add_command(["get res"], self.comm_batches_get_results,
                                            "Get batch by index and print last results summary", self,
@@ -547,16 +564,19 @@ class CompuRacer:
                                            arg_spec=[("Index of the batch", int),
                                                      ("First group number (0 <= number < num_groups)", int),
                                                      ("Second group number", int)],
-                                           arg_spec_opt=[("Request ID", str, "* last request in batch (alphabetical) *")]
+                                           arg_spec_opt=[
+                                               ("Request ID", str, "* last request in batch (alphabetical) *")]
                                            )
 
         self.command_processor.add_command(["rn bs", "rn batch"], self.comm_batches_rename,
-                                           "Rename the batch to the new name. If old name not provided, it will rename the current batch", self,
+                                           "Rename the batch to the new name. If old name not provided, it will rename the current batch",
+                                           self,
                                            arg_spec=[("New name of the batch", str)],
                                            arg_spec_opt=[("Index of the batch", int, "* the current batch *")]
                                            )
         self.command_processor.add_command(["cp bs", "cp batch"], self.comm_batches_copy,
-                                           "Copy the batch and give it a new name. If name not provided, it will copy the current batch", self,
+                                           "Copy the batch and give it a new name. If name not provided, it will copy the current batch",
+                                           self,
                                            arg_spec=[("Name of the new batch", str)],
                                            arg_spec_opt=[("Index of the batch", int, "* the current batch *")]
                                            )
@@ -578,8 +598,9 @@ class CompuRacer:
                                            "Import a previously exported batch by number or using a file picker (if no arguments).\n"
                                            "If the system does not support showing a dialog, it will show an error message"
                                            "Duplicates will be renamed.", self,
-                                           arg_spec_opt=[("Index of the first batch", int, "* opens file picker dialog *"),
-                                                         ("Index of the last batch", int, "* only the first batch *")]
+                                           arg_spec_opt=[
+                                               ("Index of the first batch", int, "* opens file picker dialog *"),
+                                               ("Index of the last batch", int, "* only the first batch *")]
                                            ),
         self.command_processor.add_command(["reg bss", "regroup batches"], self.comm_batches_regroup,
                                            "For all batches, force regroup the results. Useful when grouping code is updated.\n"
@@ -603,15 +624,17 @@ class CompuRacer:
                                            "Sets the current batch send timout (default 20 seconds).", self,
                                            arg_spec_opt=[("send timeout >= 1", int, 20)]
                                            )
-        self.command_processor.add_command(["add"], self.comm_curr_add,
-                                           "Adds a request to the current batch by ID, wait_time, parallel and sequential duplicates", self,
+        self.command_processor.add_command(["add"], self.comm_curr_add_static,
+                                           "Adds a request to the current batch by ID, wait_time, parallel and sequential duplicates",
+                                           self,
                                            arg_spec=[("Request ID", str)],
                                            arg_spec_opt=[("Wait time >= 0", int, 0),
                                                          ("Parallel duplicates > 0", int, 1),
                                                          ("Sequential duplicates > 0", int, 1)]
                                            )
         self.command_processor.add_command(["upd", "update"], self.comm_curr_update,
-                                           "Updates the wait_time, parallel and/or sequential duplication of the request in the current batch.", self,
+                                           "Updates the wait_time, parallel and/or sequential duplication of the request in the current batch.",
+                                           self,
                                            arg_spec=[("Request ID", str), ("Wait time >= 0", int, 0)],
                                            arg_spec_opt=[("Parallel duplicates > 0", int, 1),
                                                          ("Sequential duplicates > 0", int, 1)]
@@ -624,11 +647,14 @@ class CompuRacer:
                                            arg_spec=[("Field name (case sensitive)", str)]
                                            )
         self.command_processor.add_command(["res ign", "reset ignore"], self.comm_curr_reset_ignore,
-                                           "Reset the ignore fields in grouping of the current batch to the default values", self)
+                                           "Reset the ignore fields in grouping of the current batch to the default values",
+                                           self)
 
         self.command_processor.add_command(["cont"], self.comm_curr_get_contents,
                                            "Print current batch contents summary", self,
-                                           arg_spec_opt=[("If true, get full batch contents (including ASCII timing-representation) else get summary", bool, False)]
+                                           arg_spec_opt=[(
+                                               "If true, get full batch contents (including ASCII timing-representation) else get summary",
+                                               bool, False)]
                                            )
         self.command_processor.add_command(["res"], self.comm_curr_get_results,
                                            "Print current batch last results", self,
@@ -636,10 +662,12 @@ class CompuRacer:
                                                          ("If true, get groups contents", bool, False)]
                                            )
         self.command_processor.add_command(["comp"], self.comm_curr_compare_groups,
-                                           "Compares two response groups within the request result in current batch", self,
+                                           "Compares two response groups within the request result in current batch",
+                                           self,
                                            arg_spec=[("First group number (0 <= number < num_groups)", int),
                                                      ("Second group number", int)],
-                                           arg_spec_opt=[("Request ID", str, "* last request in batch (alphabetical) *")]
+                                           arg_spec_opt=[
+                                               ("Request ID", str, "* last request in batch (alphabetical) *")]
                                            )
         self.command_processor.add_command(["rm"], self.comm_curr_remove,
                                            "Removes (a) request(s) from the current batch by ID and wait_time", self,
@@ -701,7 +729,6 @@ class CompuRacer:
                 if not self.command_processor.accept_yes_no(
                         "Are you sure you want to change the immediate mode while the immediate batch is not yet sent?",
                         utils.QType.WARNING):
-
                     self.print_formatted("Immediate-mode change is cancelled.", utils.QType.INFORMATION, not from_ui)
                     return
             else:
@@ -715,7 +742,8 @@ class CompuRacer:
                              utils.QType.INFORMATION, not from_ui)
 
     @staticmethod
-    def comm_mode_set_settings(self, parallel_dup=1, sequential_dup=1, allow_redirects=False, sync_last_byte=True, send_timeout=20, from_ui=True):
+    def comm_mode_set_settings(self, parallel_dup=1, sequential_dup=1, allow_redirects=False, sync_last_byte=True,
+                               send_timeout=20, from_ui=True):
         """
         When the mode is 'on' or 'curr', it will add requests with these settings to a batch
         :param self: reference to the CompuRacer
@@ -724,17 +752,22 @@ class CompuRacer:
         :return: 0 on success and -1 on error
         """
         if parallel_dup <= 0:
-            self.print_formatted(f"Immediate-mode parallel_dup must be positive, but is: {parallel_dup}", utils.QType.ERROR)
+            self.print_formatted(f"Immediate-mode parallel_dup must be positive, but is: {parallel_dup}",
+                                 utils.QType.ERROR)
             return -1
         if sequential_dup <= 0:
-            self.print_formatted(f"Immediate-mode sequential_dup must be positive, but is: {sequential_dup}", utils.QType.ERROR)
+            self.print_formatted(f"Immediate-mode sequential_dup must be positive, but is: {sequential_dup}",
+                                 utils.QType.ERROR)
             return -1
         if send_timeout < 1:
             self.print_formatted(f"Immediate-mode send_timeout must be >= 1, but is: {send_timeout}", utils.QType.ERROR)
             return -1
-        self.__change_state('immediate_settings', [parallel_dup, sequential_dup, allow_redirects, sync_last_byte, send_timeout])
+        self.__change_state('immediate_settings',
+                            [parallel_dup, sequential_dup, allow_redirects, sync_last_byte, send_timeout])
         if from_ui:
-            self.server_send_queue.put({'type': 'settings', 'content': [parallel_dup, sequential_dup, allow_redirects, sync_last_byte, send_timeout]})
+            self.server_send_queue.put({'type': 'settings',
+                                        'content': [parallel_dup, sequential_dup, allow_redirects, sync_last_byte,
+                                                    send_timeout]})
         self.print_formatted(f"Immediate-mode settings are set to: '{self.state['immediate_settings']}'",
                              utils.QType.INFORMATION, not from_ui)
 
@@ -763,8 +796,9 @@ class CompuRacer:
                     return -1
                 request_id = str(sorted([int(key) for key in self.state['requests'].keys()])[-1])
             if request_id not in self.state['requests']:
-                self.print_formatted(f"Cannot get request: The request with id '{request_id}' is not in the total request list!",
-                                     utils.QType.ERROR)
+                self.print_formatted(
+                    f"Cannot get request: The request with id '{request_id}' is not in the total request list!",
+                    utils.QType.ERROR)
                 return -1
             the_request = copy.deepcopy(self.state['requests'][request_id])
             # format the body if it is form key-value data
@@ -776,7 +810,8 @@ class CompuRacer:
             self.print_formatted(utils.tabbed_pprint_request(the_request, 1), utils.QType.NONE)
 
     @staticmethod  # internal usage
-    def comm_requests_get(self, request_id_first=None, request_id_last=None, sort_order=SortOrder.INDEX.value, sort_ascending=True):
+    def comm_requests_get(self, request_id_first=None, request_id_last=None, sort_order=SortOrder.INDEX.value,
+                          sort_ascending=True):
         with self.requests_list_lock:
             reqs_used = {}
             message = ""
@@ -802,7 +837,8 @@ class CompuRacer:
 
             req_list = utils.sort_requests(reqs_used, sort_order, sort_ascending)
             self.print_formatted(message, utils.QType.INFORMATION)
-            self.print_formatted(f"{utils.print_request_table(req_list)}\nTotal number: {len(reqs_used.keys())}", utils.QType.NONE)
+            self.print_formatted(f"{utils.print_request_table(req_list)}\nTotal number: {len(reqs_used.keys())}",
+                                 utils.QType.NONE)
 
     @staticmethod  # internal usage
     def comm_requests_comp(self, request_id_1, request_id_2, print_matches=False):
@@ -836,7 +872,6 @@ class CompuRacer:
             utils.QType.INFORMATION)
         self.colorprint_comp_results(self, comp)
 
-
     @staticmethod  # do not add requests to this list in any other way
     def comm_requests_remove(self, request_id_first=None, request_id_last=None, ask_confirmation=True):
         with self.requests_list_lock:
@@ -848,8 +883,9 @@ class CompuRacer:
             success_requests = []
             if request_id_first is None:
                 # remove all requests
-                if not ask_confirmation or self.command_processor.accept_yes_no("Are you sure you want to remove all requests?",
-                                                                                utils.QType.WARNING):
+                if not ask_confirmation or self.command_processor.accept_yes_no(
+                        "Are you sure you want to remove all requests?",
+                        utils.QType.WARNING):
                     for i, request_id in enumerate(copy.deepcopy(list(self.state['requests'].keys()))):
                         if self.rem_request(self, request_id, False) == -1:
                             failed_requests.append(request_id)
@@ -879,15 +915,17 @@ class CompuRacer:
                 else:
                     success_requests.append(request_id_first)
             if success_requests:
-                self.print_formatted(f"Removal of {len(success_requests)} request(s) successful.", utils.QType.INFORMATION)
+                self.print_formatted(f"Removal of {len(success_requests)} request(s) successful.",
+                                     utils.QType.INFORMATION)
             if failed_requests:
                 self.print_formatted(f"Removal of the following request(s) failed:\n\t{failed_requests} ",
                                      utils.QType.WARNING)
 
     @staticmethod
     def comm_requests_lower_ids(self):
-        if not self.command_processor.accept_yes_no("Are you sure you want to lower and make sequential all request ids?\n\tThis can take some time.",
-                                                    utils.QType.WARNING):
+        if not self.command_processor.accept_yes_no(
+                "Are you sure you want to lower and make sequential all request ids?\n\tThis can take some time.",
+                utils.QType.WARNING):
             self.print_formatted(f"Lowering of request ids is cancelled.", utils.QType.INFORMATION)
             return
         if not self.state['requests']:
@@ -895,7 +933,8 @@ class CompuRacer:
             self.print_formatted(f"Nothing is changed: The total request list is empty.", utils.QType.WARNING)
             return
 
-        if int(sorted([int(key) for key in self.state['requests'].keys()])[-1]) + 1 == len(self.state['requests'].keys()):
+        if int(sorted([int(key) for key in self.state['requests'].keys()])[-1]) + 1 == len(
+                self.state['requests'].keys()):
             self.print_formatted(f"Nothing is changed: The request ids are already as low as they can be.",
                                  utils.QType.INFORMATION)
             return
@@ -916,7 +955,8 @@ class CompuRacer:
                 updated_ids[old_id] = new_id
 
         if not updated_ids:
-            self.print_formatted(f"Nothing is changed: The request ids are already as low as they can be.", utils.QType.INFORMATION)
+            self.print_formatted(f"Nothing is changed: The request ids are already as low as they can be.",
+                                 utils.QType.INFORMATION)
             return
 
         # update renewed ids in batches
@@ -946,7 +986,9 @@ class CompuRacer:
                 return ret_str
             else:
                 self.print_formatted("The matching request(s):", utils.QType.INFORMATION)
-                self.print_formatted(f"{utils.print_request_table(req_list)}\nTotal number: {len(self.state['requests'].keys())}", utils.QType.NONE)
+                self.print_formatted(
+                    f"{utils.print_request_table(req_list)}\nTotal number: {len(self.state['requests'].keys())}",
+                    utils.QType.NONE)
 
     @staticmethod
     def add_request(self, a_request, used_from_interface=False, print_information=True):
@@ -963,7 +1005,7 @@ class CompuRacer:
                 if not diff['fail']['total']:
                     if print_information:
                         self.print_formatted(
-                            f"New request is not added, it already exists: \n{utils.tabbed_string(utils.print_request_table([req]),1)}",
+                            f"New request is not added, it already exists: \n{utils.tabbed_string(utils.print_request_table([req]), 1)}",
                             utils.QType.WARNING, not used_from_interface)
                     duplicate_id = req['id']
                     break
@@ -984,7 +1026,7 @@ class CompuRacer:
                             utils.QType.INFORMATION, not used_from_interface)
                     else:
                         self.print_formatted(
-                            f"Added new request:\n{utils.tabbed_string(utils.print_request_table([a_request]),1)}\nTotal number: {len(self.state['requests'].keys())}",
+                            f"Added new request:\n{utils.tabbed_string(utils.print_request_table([a_request]), 1)}\nTotal number: {len(self.state['requests'].keys())}",
                             utils.QType.INFORMATION, not used_from_interface)
             else:
                 req_id = duplicate_id
@@ -1017,8 +1059,14 @@ class CompuRacer:
                             self.rem_batch_by_name(self, self.immediate_batch_name, True)
                     if self.immediate_batch_name not in self.state['batches']:
                         # create new immediate batch
-                        self.comm_batches_create_new(self, self.immediate_batch_name, False, not used_from_interface,
-                                                     allow_redirects, sync_last_byte, send_timeout)
+                        if self.cli_check:
+                            return self.comm_batches_create_new_static(self, self.immediate_batch_name, False,
+                                                                       not used_from_interface,
+                                                                       allow_redirects, sync_last_byte, send_timeout)
+                        else:
+                            return self.comm_batches_create_new(self, self.immediate_batch_name, False,
+                                                                not used_from_interface,
+                                                                allow_redirects, sync_last_byte, send_timeout)
 
                     immediate_batch = self.state['batches'][self.immediate_batch_name]
                     try:
@@ -1085,7 +1133,7 @@ class CompuRacer:
                     return -1
                 # remove request from the batches
                 if not self.command_processor.accept_yes_no(f"The request with id '{request_id}' is used by batches: "
-                                     f"{used_in}, continue?\n\tIt will be removed from these batches and their results are cleared!!",
+                                                            f"{used_in}, continue?\n\tIt will be removed from these batches and their results are cleared!!",
                                                             utils.QType.WARNING):
                     return -1
                 # remove request from the batches
@@ -1093,8 +1141,9 @@ class CompuRacer:
                     self.state['batches'][batch_name].remove(request_id)
                 ask_confirmation = False
 
-            if not ask_confirmation or self.command_processor.accept_yes_no(f"Are you sure you want to remove the request with id '{request_id}'?",
-                                                                            utils.QType.WARNING):
+            if not ask_confirmation or self.command_processor.accept_yes_no(
+                    f"Are you sure you want to remove the request with id '{request_id}'?",
+                    utils.QType.WARNING):
                 self.__change_state('requests', sub_search=request_id, do_delete=True)
                 self.print_formatted(f"Request with id '{request_id}' is removed", utils.QType.INFORMATION)
             else:
@@ -1114,6 +1163,9 @@ class CompuRacer:
                 re.compile(r"'status_code': 4.."): utils.QType.RED,
                 re.compile(r"'status_code': 5.."): utils.QType.BLUE}
 
+    def gui_send_batches(self):
+        self.comm_batches_send(self)
+
     @staticmethod
     def comm_batches_send(self, index=None, print_results=True, immediate_allowed=False):
         name = self.batch_index_to_name(self, index)
@@ -1128,7 +1180,8 @@ class CompuRacer:
             return -1
         self.print_formatted(f"Sending the batch with name '{name}'..", utils.QType.INFORMATION)
 
-        if batch.has_results() and not self.command_processor.accept_yes_no("Batch already has results, overwrite?", utils.QType.WARNING):
+        if batch.has_results() and not self.command_processor.accept_yes_no("Batch already has results, overwrite?",
+                                                                            utils.QType.WARNING):
             self.print_formatted(f"Batch sending cancelled.", utils.QType.INFORMATION)
             return -1
         batch.overwrite_results(sender.send_batch(batch, self.state['requests'], self.proxy))
@@ -1158,7 +1211,8 @@ class CompuRacer:
         col_names = Batch.get_mini_summary_header()
         output = tabulate(contents, col_names, showindex="always", tablefmt="simple") + "\n"
         if self.state['current_batch']:
-            self.print_formatted_multi(output, utils.QType.NONE, {f" {re.escape(self.state['current_batch'])} ": utils.QType.BLUE})
+            self.print_formatted_multi(output, utils.QType.NONE,
+                                       {f" {re.escape(self.state['current_batch'])} ": utils.QType.BLUE})
         else:
             self.print_formatted(output, utils.QType.NONE)
 
@@ -1167,7 +1221,10 @@ class CompuRacer:
         name = self.batch_index_to_name(self, index)
         if name == -1:
             return -1
-        return self.set_curr_batch_by_name(self, name, immediate_allowed)
+        if self.cli_check:
+            return self.set_curr_batch_by_name_static(self, name, immediate_allowed)
+        else:
+            return self.set_curr_batch_by_name(self, name, immediate_allowed)
 
     @staticmethod
     def add_prefix(self, name):
@@ -1177,8 +1234,8 @@ class CompuRacer:
             return self.state['project_name'] + name
 
     @staticmethod
-    def comm_batches_create_new(self, name, set_current_batch=True, immediate_allowed=False,
-                                allow_redirects=False, sync_last_byte=False, send_timeout=20):
+    def comm_batches_create_new_static(self, name, set_current_batch=True, immediate_allowed=False,
+                                       allow_redirects=False, sync_last_byte=False, send_timeout=20):
         if name != self.immediate_batch_name:
             name = self.add_prefix(self, name)
         if not immediate_allowed and name == self.immediate_batch_name:
@@ -1192,7 +1249,13 @@ class CompuRacer:
         self.print_formatted(f"Created a new batch:", utils.QType.INFORMATION)
         self.print_formatted(new_batch.get_summary(), utils.QType.BLUE)
         if set_current_batch:
-            return self.set_curr_batch_by_name(self, name)
+            if self.cli_check:
+                return self.set_curr_batch_by_name_static(self, name)
+            else:
+                return self.set_curr_batch_by_name_static(self, name)
+
+    def gui_create_new_batch(self, name):
+        self.comm_batches_create_new_static(self, name)
 
     @staticmethod
     def comm_batches_get_project(self):
@@ -1253,7 +1316,8 @@ class CompuRacer:
         if name == -1:
             return -1
         if name_new in self.state['batches']:
-            self.print_formatted(f"Cannot rename batch '{name}' to '{name_new}': New batch name already exists!", utils.QType.ERROR)
+            self.print_formatted(f"Cannot rename batch '{name}' to '{name_new}': New batch name already exists!",
+                                 utils.QType.ERROR)
             return -1
 
         if not self.remove_batch_file(self, name):
@@ -1274,7 +1338,8 @@ class CompuRacer:
         if name == -1:
             return -1
         if name_new in self.state['batches']:
-            self.print_formatted(f"Cannot copy batch '{name}' to '{name_new}': New batch name already exists!", utils.QType.ERROR)
+            self.print_formatted(f"Cannot copy batch '{name}' to '{name_new}': New batch name already exists!",
+                                 utils.QType.ERROR)
             return -1
         self.__change_state('batches', copy.deepcopy(self.state['batches'][name]), sub_search=name_new)
         self.state['batches'][name_new].set_name(name_new)
@@ -1304,7 +1369,7 @@ class CompuRacer:
 
         if first_index is None and last_index is None and self.dialog_queue is None:
             self.print_formatted(f"Importing via dialog failed: the system does not support it!",
-                                     utils.QType.ERROR)
+                                 utils.QType.ERROR)
             return -1
 
         filenames = self.imp_batch_indices_to_names(self, first_index, last_index)
@@ -1315,7 +1380,8 @@ class CompuRacer:
             filenames = None
             while not filenames:
                 filenames = self.select_files(self, "Select one or more batch export files", ".json")
-                if not filenames and not self.command_processor.accept_yes_no("Selected files are not valid, retry?", utils.QType.WARNING):
+                if not filenames and not self.command_processor.accept_yes_no("Selected files are not valid, retry?",
+                                                                              utils.QType.WARNING):
                     return -1
 
         success_batches = []
@@ -1336,7 +1402,8 @@ class CompuRacer:
     def comm_batches_regroup(self):
         self.print_formatted(f"Regrouping all batches..", utils.QType.INFORMATION)
         time.sleep(0.25)
-        for batch_name in tqdm(list(self.state['batches'].keys()), desc="Grouping batches", ncols=self.progress_bar_width):
+        for batch_name in tqdm(list(self.state['batches'].keys()), desc="Grouping batches",
+                               ncols=self.progress_bar_width):
             batch = self.state['batches'][batch_name]
             batch.redo_all_grouping(force=True)
         time.sleep(0.25)
@@ -1409,10 +1476,11 @@ class CompuRacer:
             return -1
         return indices[index]
 
-    @staticmethod  # internal usage
-    def set_curr_batch_by_name(self, name, immediate_allowed=False):
+    @staticmethod
+    def set_curr_batch_by_name_static(self, name, immediate_allowed=False):
         if not immediate_allowed and name == self.immediate_batch_name:
-            self.print_formatted(f"Not allowed to set immediate batch as current batch from interface!", utils.QType.ERROR)
+            self.print_formatted(f"Not allowed to set immediate batch as current batch from interface!",
+                                 utils.QType.ERROR)
             return -1
         self.__change_state('current_batch', name)
         self.print_formatted(f"Set current batch to batch with name '{name}'.", utils.QType.INFORMATION)
@@ -1420,11 +1488,14 @@ class CompuRacer:
     @staticmethod  # internal usage
     def comp_batch_resp_groups_by_name(self, batch_name, group_nr_1, group_nr_2, request_id=None):
         try:
-            results, request_id = self.state['batches'][batch_name].compare_group_repr(group_nr_1, group_nr_2, request_id)
+            results, request_id = self.state['batches'][batch_name].compare_group_repr(group_nr_1, group_nr_2,
+                                                                                       request_id)
             if not results or results == -1:
                 self.print_formatted(f"No results yet.", utils.QType.NONE)
             else:
-                self.print_formatted(f"Comparison of result groups {group_nr_1} and {group_nr_2} in request '{request_id}' of batch '{batch_name}':", utils.QType.INFORMATION)
+                self.print_formatted(
+                    f"Comparison of result groups {group_nr_1} and {group_nr_2} in request '{request_id}' of batch '{batch_name}':",
+                    utils.QType.INFORMATION)
                 self.colorprint_comp_results(self, results)
         except Exception as e:
             self.print_formatted(f"{e}", utils.QType.ERROR)
@@ -1501,7 +1572,7 @@ class CompuRacer:
         if 'batches' not in self.state:
             self.state['batches'] = {}
         self.state['batches'][batch.name] = batch
-        #self.__change_state('batches', batch, sub_search=batch.name)
+        # self.__change_state('batches', batch, sub_search=batch.name)
 
     @staticmethod
     def imp_batch_by_name(self, filename):
@@ -1658,7 +1729,8 @@ class CompuRacer:
         :return: 0 on success and -1 on error
         """
         if not self.state['current_batch']:
-            self.print_formatted(f"Cannot add change redirects of current batch: There is no current batch!", utils.QType.ERROR)
+            self.print_formatted(f"Cannot add change redirects of current batch: There is no current batch!",
+                                 utils.QType.ERROR)
             return -1
         self.state['batches'][self.state['current_batch']].set_allow_redirects(enable_redirects)
         self.print_formatted(f"Set follow redirects of current batch to: '{enable_redirects}'", utils.QType.INFORMATION)
@@ -1672,7 +1744,8 @@ class CompuRacer:
         :return: 0 on success and -1 on error
         """
         if not self.state['current_batch']:
-            self.print_formatted(f"Cannot add change last byte sync of current batch: There is no current batch!", utils.QType.ERROR)
+            self.print_formatted(f"Cannot add change last byte sync of current batch: There is no current batch!",
+                                 utils.QType.ERROR)
             return -1
         self.state['batches'][self.state['current_batch']].set_sync_last_byte(enable_sync)
         self.print_formatted(f"Set last byte sync of current batch to: '{enable_sync}'", utils.QType.INFORMATION)
@@ -1686,14 +1759,14 @@ class CompuRacer:
         :return: 0 on success and -1 on error
         """
         if not self.state['current_batch']:
-            self.print_formatted(f"Cannot add change send timeout of current batch: There is no current batch!", utils.QType.ERROR)
+            self.print_formatted(f"Cannot add change send timeout of current batch: There is no current batch!",
+                                 utils.QType.ERROR)
             return -1
         if send_timeout < 1:
             self.print_formatted(f"The send timeout must be >= 1! Input: {send_timeout} seconds", utils.QType.ERROR)
             return -1
         self.state['batches'][self.state['current_batch']].set_send_timeout(send_timeout)
         self.print_formatted(f"Set send timeout of current batch to: '{send_timeout}'", utils.QType.INFORMATION)
-
 
     @staticmethod
     def comm_curr_get_results(self, get_tables=False, get_groups=False):
@@ -1720,7 +1793,7 @@ class CompuRacer:
 
     # NOTE: it does not overwrite an item with the same id & wait_time.
     @staticmethod
-    def comm_curr_add(self, request_id, wait_time=0, dup_par=1, dup_seq=1):
+    def comm_curr_add_static(self, request_id, wait_time=0, dup_par=1, dup_seq=1):
         """
         Adds the request with this wait time and the parallel and sequential values to the current batch
         :param self: reference to the CompuRacer
@@ -1732,11 +1805,14 @@ class CompuRacer:
         :return:
         """
         if request_id not in self.state['requests']:
-            self.print_formatted(f"Cannot add a request to current batch: The request with id '{request_id}' is not in the request list!",
-                                 utils.QType.ERROR)
+            self.print_formatted(
+                f"Cannot add a request to current batch: The request with id '{request_id}' is not in the request list!",
+                utils.QType.ERROR)
             return -1
         if not self.state['current_batch']:
-            self.print_formatted(f"Cannot add a request to current batch: There is no current batch! First, select a current batch.", utils.QType.ERROR)
+            self.print_formatted(
+                f"Cannot add a request to current batch: There is no current batch! First, select a current batch.",
+                utils.QType.ERROR)
             return -1
         curr_batch = self.state['batches'][self.state['current_batch']]
         try:
@@ -1744,8 +1820,39 @@ class CompuRacer:
         except Exception as e:
             self.print_formatted(f"Cannot add a request to current batch:\n\t{e}", utils.QType.ERROR)
             return -1
-        self.print_formatted(f"The request was added to the current batch:\n" 
-                               f"{curr_batch.get_info(request_id, wait_time)}",
+        self.print_formatted(f"The request was added to the current batch:\n"
+                             f"{curr_batch.get_info(request_id, wait_time)}",
+                             utils.QType.INFORMATION)
+
+    def comm_curr_add(self, state, request_id, wait_time=0, dup_par=1, dup_seq=1):
+        """
+        Adds the request with this wait time and the parallel and sequential values to the current batch
+        :param self: reference to the CompuRacer
+        :param request_id: the id of the request
+        :param wait_time: the wait time of the request before sending it
+        :param dup_par: the parallel duplication
+        :param dup_seq: the parallel sequential
+        :return: 0 on success and -1 on error
+        :return:
+        """
+        if request_id not in state['requests']:
+            self.print_formatted(
+                f"Cannot add a request to current batch: The request with id '{request_id}' is not in the request list!",
+                utils.QType.ERROR)
+            return -1
+        if not state['current_batch']:
+            self.print_formatted(
+                f"Cannot add a request to current batch: There is no current batch! First, select a current batch.",
+                utils.QType.ERROR)
+            return -1
+        curr_batch = self.state['batches'][self.state['current_batch']]
+        try:
+            curr_batch.add(request_id, wait_time, dup_par, dup_seq, False)
+        except Exception as e:
+            self.print_formatted(f"Cannot add a request to current batch:\n\t{e}", utils.QType.ERROR)
+            return -1
+        self.print_formatted(f"The request was added to the current batch:\n"
+                             f"{curr_batch.get_info(request_id, wait_time)}",
                              utils.QType.INFORMATION)
 
     # NOTE: it does not overwrite an item with the same id & wait_time.
@@ -1793,7 +1900,7 @@ class CompuRacer:
             return -1
         curr_batch = self.state['batches'][self.state['current_batch']]
         fields = curr_batch.get_ignored_fields()
-        self.print_formatted(f"The ignored fields in grouping of results in the current batch:\n\t" 
+        self.print_formatted(f"The ignored fields in grouping of results in the current batch:\n\t"
                              f"{fields}\n", utils.QType.INFORMATION)
 
     @staticmethod
@@ -1830,8 +1937,9 @@ class CompuRacer:
                 utils.QType.WARNING)
             return -1
         fields = curr_batch.get_ignored_fields()
-        self.print_formatted(f"Successfully resetted the ignored fields in grouping of results in the current batch:\n\t" 
-                             f"{fields}\n", utils.QType.INFORMATION)
+        self.print_formatted(
+            f"Successfully resetted the ignored fields in grouping of results in the current batch:\n\t"
+            f"{fields}\n", utils.QType.INFORMATION)
 
     @staticmethod
     def comm_curr_remove(self, request_id=None, wait_time=None):
@@ -1843,11 +1951,14 @@ class CompuRacer:
         :return: 0 on success and -1 on error
         """
         if not self.state['current_batch']:
-            self.print_formatted(f"Cannot remove a request from current batch: There is no current batch! First, select a current batch.", utils.QType.ERROR)
+            self.print_formatted(
+                f"Cannot remove a request from current batch: There is no current batch! First, select a current batch.",
+                utils.QType.ERROR)
             return -1
         curr_batch = self.state['batches'][self.state['current_batch']]
         if curr_batch.is_empty():
-            self.print_formatted(f"Cannot remove a request from current batch: The current batch is empty!", utils.QType.ERROR)
+            self.print_formatted(f"Cannot remove a request from current batch: The current batch is empty!",
+                                 utils.QType.ERROR)
             return -1
         if request_id is None:
             # remove all items from the batch
@@ -1860,7 +1971,8 @@ class CompuRacer:
             question = f"Are you sure you want to remove the request with id '{request_id}' and wait_time '{wait_time}' from the current batch?"
         if self.command_processor.accept_yes_no(question, utils.QType.WARNING):
             num_removed = curr_batch.remove(request_id, wait_time)
-            self.print_formatted(f"All matching requests are removed from the current batch.\nNumber: {num_removed}", utils.QType.INFORMATION)
+            self.print_formatted(f"All matching requests are removed from the current batch.\nNumber: {num_removed}",
+                                 utils.QType.INFORMATION)
         else:
             self.print_formatted(f"Removal of current batch requests cancelled.", utils.QType.INFORMATION)
 
@@ -1878,7 +1990,8 @@ class CompuRacer:
             return -1
         if self.state['immediate_mode'] == "on":
             # send the immediate batch
-            return self.comm_batches_send(self, self.get_index_by_name(self.immediate_batch_name), self.state['immediate_print'], True)
+            return self.comm_batches_send(self, self.get_index_by_name(self.immediate_batch_name),
+                                          self.state['immediate_print'], True)
 
     def get_batch_indices(self):
         return sorted(self.state['batches'].keys())

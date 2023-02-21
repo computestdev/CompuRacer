@@ -5,7 +5,6 @@ It is used to create a CompuRacer instance and start it.
 The main threat is also responsible for shoing any filepicker dialogs.
 """
 
-
 # --- All imports --- #
 import argparse
 import queue
@@ -57,22 +56,37 @@ __version__ = "2019"
 __email__ = "rvanemous@computest.nl"
 __status__ = "Prototype"
 
+# ---  Maintenance Developer information --- #
+__developer__ = "B. van Wijk @ Computest"
+__license__ = "MIT License"
+__version__ = "v1 2023"
+__email__ = "bvanwijk@computest.nl"
+__status__ = "Production v1"
+
+# --- Checking for arguments --- #
+parser = argparse.ArgumentParser()
+parser.add_argument("--port",
+                    nargs='?',
+                    help="Sets the port number of the REST server",
+                    type=int,
+                    default=None)
+parser.add_argument("--proxy",
+                    nargs='?',
+                    help="Sets the SOCKS proxy <IP-adress>:<port> to use",
+                    type=str,
+                    default=None)
+parser.add_argument("--cli",
+                    action="store_true",
+                    help="Disables the standard ui",
+                    )
+
+args = parser.parse_args()
+
+# --- if --cli is used, this will be true --- #
+cli_check = args.cli
+
 # -------------- main client program & server -------------- #
 if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port",
-                        nargs='?',
-                        help="Sets the port number of the REST server",
-                        type=int,
-                        default=None)
-    parser.add_argument("--proxy",
-                        nargs='?',
-                        help="Sets the SOCKS proxy <IP-adress>:<port> to use",
-                        type=str,
-                        default=None)
-    args = parser.parse_args()
-
     if use_tkinter:
         dialog_queue = Queue()
     else:
@@ -81,12 +95,12 @@ if __name__ == '__main__':
 
     # initialize the racer
     if args.proxy:
-        racer = CompuRacer(args.port, f"socks5://{args.proxy}", dialog_queue)
+        racer = CompuRacer(args.port, f"socks5://{args.proxy}", dialog_queue, cli_check)
     else:
-        racer = CompuRacer(args.port, None, dialog_queue)
+        racer = CompuRacer(args.port, None, dialog_queue, cli_check)
 
     # start the racer
-    racer.start()
+    racer.start(cli_check, racer)
 
     # listen for dialogs or wait
     while not racer.is_shutdown:
