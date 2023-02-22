@@ -3,7 +3,8 @@ import os
 import sys
 
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtWidgets import QPushButton, QMainWindow, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QTabWidget, QWidget, QMessageBox, QLineEdit, QHBoxLayout, QApplication
+from PyQt5.QtWidgets import QPushButton, QSystemTrayIcon, QMenu, QAction, QMainWindow, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QTabWidget, QWidget, QMessageBox, QLineEdit, QHBoxLayout, QApplication
+from PyQt5.QtGui import QIcon
 
 
 def load_json_batches(directory) -> [str]:
@@ -29,6 +30,8 @@ class RequestsGUI(QMainWindow):
         self.command_processor = cmdprocessor
         self.racer = racer
         self.state = state
+
+        self.batch_buttons = []
 
         self.load_json_requests()
 
@@ -84,6 +87,10 @@ class RequestsGUI(QMainWindow):
         self.table_widget.setHorizontalHeaderLabels(["Name", "Allow Redirects", "Sync Last Byte", "Send Timeout", "Set Current Batch", "Open Batch"])
         vbox.addWidget(self.table_widget)
 
+        # clear the table widget before loading new batches
+        self.table_widget.clearContents()
+        self.table_widget.setRowCount(0)
+
         current_batch = self.data_requests["current_batch"]
 
         # --- Add new batch --- #
@@ -97,10 +104,15 @@ class RequestsGUI(QMainWindow):
         vbox.addLayout(hbox)
 
         # --- Add other important buttons --- #
-        vbox.addWidget(QPushButton("Save", self, clicked=self.save_data))
-        vbox.addWidget(QPushButton("Reload JSON", self, clicked=self.reload_json))
+        quit_button = QPushButton("Quit", self)
+        quit_button.clicked.connect(QApplication.quit)
+        vbox.addWidget(quit_button)
 
         self.load_batches(file_names, directory, vbox, current_batch)
+
+        self.update_json_timer = QTimer()
+        self.update_json_timer.timeout.connect(self.reload_json)
+        self.update_json_timer.start(5000)
 
         batches_tab.setLayout(vbox)
 
@@ -147,41 +159,44 @@ class RequestsGUI(QMainWindow):
 
         return None
 
-    def load_batches(self, file_names, directory, vbox, current_batch) -> None:
-        for idx, name in enumerate(file_names):
-            # --- Create commandbuttons --- #
-            current_button = QPushButton("Set Current", self)
-            window_button = QPushButton("Open", self)
+    def load_batches(self, file_names, directory, vbox, current_batch) -> callable([]):
+        self.batch_buttons.clear()
 
-            current_button.clicked.connect(lambda _, batch_name=name: self.set_current_batch(batch_name))
-            window_button.clicked.connect(lambda _, batch_name=name: self.new_batch_window(batch_name))
+        def load_table():
+            for idx, name in enumerate(file_names):
+                # --- Create commandbuttons --- #
+                current_button = QPushButton("Set Current", self)
+                window_button = QPushButton("Open", self)
 
-            vbox.addWidget(window_button)
-            vbox.addWidget(current_button)
+                current_button.clicked.connect(lambda _, batch_name=name: self.set_current_batch(batch_name))
+                window_button.clicked.connect(lambda _, batch_name=name: self.new_batch_window(batch_name))
 
-            # --- Insert row number {forloopnumber} --- #
-            row = self.table_widget.rowCount()
-            self.table_widget.insertRow(row)
-            self.table_widget.setItem(row, 0, QTableWidgetItem(str(name)))
-            self.table_widget.setCellWidget(row, 4, current_button)
-            self.table_widget.setCellWidget(row, 5, window_button)
+                self.batch_buttons.append((current_button, window_button))
 
-            self.check_current_batch(name, row, current_button, window_button, current_batch)
+                # --- Insert row number {forloopnumber} --- #
+                row = self.table_widget.rowCount()
+                self.table_widget.insertRow(row)
+                self.table_widget.setItem(row, 0, QTableWidgetItem(str(name)))
+                self.table_widget.setCellWidget(row, 4, current_button)
+                self.table_widget.setCellWidget(row, 5, window_button)
 
-            data = self.get_json_data(directory, name)
+                self.check_current_batch(name, row, current_button, window_button, current_batch)
 
-            for col, col_name in enumerate(["Allow Redirects", "Sync Last Byte", "Send Timeout"]):
-                value = data.get(col_name.lower().replace(" ", "_"))
-                self.table_widget.setItem(row, col + 1, QTableWidgetItem(str(value)))
+                data = self.get_json_data(directory, name)
 
-                if name == current_batch:
-                    item = self.table_widget.item(row, col + 1)
-                    if item is not None:
-                        item.setBackground(Qt.gray)
+                for col, col_name in enumerate(["Allow Redirects", "Sync Last Byte", "Send Timeout"]):
+                    value = data.get(col_name.lower().replace(" ", "_"))
+                    self.table_widget.setItem(row, col + 1, QTableWidgetItem(str(value)))
 
-        self.remove_empty_rows()
+                    if name == current_batch:
+                        item = self.table_widget.item(row, col + 1)
+                        if item is not None:
+                            item.setBackground(Qt.gray)
 
-        return None
+            self.remove_empty_rows()
+
+        load_table()
+        return load_table
 
     def load_logs(self) -> None:
         for command in enumerate(self.data_requests["cp_history"]):
@@ -193,7 +208,6 @@ class RequestsGUI(QMainWindow):
         return None
 
     def add_request_to_batch(self, request_id):
-        current_batch = self.data_requests["current_batch"]
         self.showNotification("RequestID " + request_id + " has been added to active Batch!")
 
         self.racer.comm_curr_add(self.state, request_id)
@@ -239,28 +253,26 @@ class RequestsGUI(QMainWindow):
 
     def save_data(self) -> None:
         self.racer.comm_general_save(True)
-        self.showNotification("Succesfully saved the data, reload the JSON when you are done making changes! :)")
         return None
 
     def reload_json(self):
-        messageBox = QMessageBox()
-        messageBox.setIcon(QMessageBox.Information)
-        messageBox.setText("Are you sure?")
-        messageBox.setWindowTitle("Reloading JSON By Restarting")
-        messageBox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-
-        buttonReturn = messageBox.exec()
-        if buttonReturn == QMessageBox.Ok:
-            python = sys.executable
-            os.execl(python, python, *sys.argv)
+        if self.isActiveWindow():
+            self.save_data()
+            self.update_json_timer.stop()
+            self.hide()
+            self.general_window = RequestsGUI(self.racer, self.state, self.command_processor)  # Create a new window
+            self.general_window.show()
+            self.deleteLater()
 
     def set_current_batch(self, batch_name) -> None:
         self.racer.set_curr_batch_by_name(batch_name)
         self.current_batch = batch_name
-        self.showNotification("Set current batch to " + batch_name + ". Click on save to save your changes")
+        self.showNotification("Set current batch to " + batch_name)
         return None
 
     def new_batch_window(self, batch_name):
+        self.save_data()
+        self.update_json_timer.stop()
         self.batch_window = BatchWindow(batch_name, self.racer, self.state, self.command_processor)
         self.batch_window.show()
         self.hide()
@@ -268,10 +280,9 @@ class RequestsGUI(QMainWindow):
     def create_new_batch(self, batch_name):
         batch_name = batch_name.text()
 
-        print(batch_name)
         self.racer.gui_create_new_batch(batch_name)
 
-        self.showNotification("Added New Batch " + batch_name + ". Click on save to save your changes")
+        self.showNotification("Added New Batch " + batch_name + ". Add a request to your batch so you can open your batch")
 
     def showNotification(self, notiText):
         messageBox = QMessageBox()
@@ -322,19 +333,17 @@ class BatchWindow(QMainWindow):
         vbox.addStretch()
 
         vbox.addWidget(QPushButton("Send Batch", self, clicked=self.send_batch), alignment=Qt.AlignBottom)
-        vbox.addWidget(QPushButton("Save", self, clicked=self.save_data), alignment=Qt.AlignBottom)
-        vbox.addWidget(QPushButton("Reload JSON", self, clicked=self.reload_json), alignment=Qt.AlignBottom)
         vbox.addWidget(QPushButton("Go Back", self, clicked=self.go_back), alignment=Qt.AlignBottom)
+        vbox.addWidget(QPushButton("Quit", self, clicked=QApplication.quit()))
 
         self.setCentralWidget(tabs)
 
         self.create_requests_widget(vbox)
         vbox.insertWidget(0, self.table_widget)
 
-    # def load_batch_config(self):
-    #     config = self.load_json("state/batches/" + self.batch_name + ".json")
-    #
-    #     self.table_widget = QTableWidget()
+        self.update_json_timer = QTimer()
+        self.update_json_timer.timeout.connect(lambda: self.reload_json())
+        self.update_json_timer.start(10000)
 
     def send_batch(self):
         self.racer.gui_send_batches()
@@ -387,20 +396,16 @@ class BatchWindow(QMainWindow):
 
     def save_data(self) -> None:
         self.racer.comm_general_save(True)
-        self.showNotification("Succesfully saved the data, reload the JSON when you are done making changes! :)")
         return None
 
     def reload_json(self):
-        messageBox = QMessageBox()
-        messageBox.setIcon(QMessageBox.Information)
-        messageBox.setText("Are you sure?")
-        messageBox.setWindowTitle("Reloading JSON By Restarting")
-        messageBox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-
-        buttonReturn = messageBox.exec()
-        if buttonReturn == QMessageBox.Ok:
-            self.close()
-            os.execl(sys.executable, sys.executable, *sys.argv)
+        if self.isActiveWindow():
+            self.save_data()
+            self.update_json_timer.stop()
+            self.hide()
+            self.general_window = BatchWindow(self.batch_name, self.racer, self.state, self.command_processor)  # Create a new window
+            self.general_window.show()
+            self.deleteLater()
 
     def showNotification(self, notiText):
         messageBox = QMessageBox()

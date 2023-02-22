@@ -1249,10 +1249,7 @@ class CompuRacer:
         self.print_formatted(f"Created a new batch:", utils.QType.INFORMATION)
         self.print_formatted(new_batch.get_summary(), utils.QType.BLUE)
         if set_current_batch:
-            if self.cli_check:
-                return self.set_curr_batch_by_name_static(self, name)
-            else:
-                return self.set_curr_batch_by_name_static(self, name)
+            return self.set_curr_batch_by_name_static(self, name)
 
     def gui_create_new_batch(self, name):
         self.comm_batches_create_new_static(self, name)
@@ -1478,6 +1475,14 @@ class CompuRacer:
 
     @staticmethod
     def set_curr_batch_by_name_static(self, name, immediate_allowed=False):
+        if not immediate_allowed and name == self.immediate_batch_name:
+            self.print_formatted(f"Not allowed to set immediate batch as current batch from interface!",
+                                 utils.QType.ERROR)
+            return -1
+        self.__change_state('current_batch', name)
+        self.print_formatted(f"Set current batch to batch with name '{name}'.", utils.QType.INFORMATION)
+
+    def set_curr_batch_by_name(self, name, immediate_allowed=False):
         if not immediate_allowed and name == self.immediate_batch_name:
             self.print_formatted(f"Not allowed to set immediate batch as current batch from interface!",
                                  utils.QType.ERROR)
