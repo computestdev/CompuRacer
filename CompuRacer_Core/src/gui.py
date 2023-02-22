@@ -334,7 +334,7 @@ class BatchWindow(QMainWindow):
 
         vbox.addWidget(QPushButton("Send Batch", self, clicked=self.send_batch), alignment=Qt.AlignBottom)
         vbox.addWidget(QPushButton("Go Back", self, clicked=self.go_back), alignment=Qt.AlignBottom)
-        vbox.addWidget(QPushButton("Quit", self, clicked=QApplication.quit()))
+        vbox.addWidget(QPushButton("Quit", self, clicked=QApplication.quit))
 
         self.setCentralWidget(tabs)
 
@@ -346,6 +346,8 @@ class BatchWindow(QMainWindow):
         self.update_json_timer.start(10000)
 
     def send_batch(self):
+        self.save_data()
+        self.update_json_timer.stop()
         self.racer.gui_send_batches()
 
     def create_requests_widget(self, vbox):
