@@ -1106,6 +1106,29 @@ class CompuRacer:
                 used_in.append(batch_name)
         return used_in
 
+    def gui_remove_request(self, request_id):
+        self.rem_request_gui(request_id, False)
+
+    def rem_request_gui(self, request_id, ask_confirmation=False):
+        if request_id not in self.state['requests']:
+            self.print_formatted(f"Cannot remove request:\n\t"
+                                    f"The request with id '{request_id}' is not in the total request list!",
+                                    utils.QType.ERROR)
+            return -1
+        used_in = self.request_used_in(self, request_id)
+        if used_in:
+            for batch_name in used_in:
+                self.state['batches'][batch_name].remove(request_id)
+            ask_confirmation = False
+
+        if not ask_confirmation or self.command_processor.accept_yes_no(
+                f"Are you sure you want to remove the request with id '{request_id}'?",
+                utils.QType.WARNING):
+            self.__change_state('requests', sub_search=request_id, do_delete=True)
+            self.print_formatted(f"Request with id '{request_id}' is removed", utils.QType.INFORMATION)
+        else:
+            self.print_formatted(f"Removal of request cancelled.", utils.QType.INFORMATION)
+
     @staticmethod  # do not add requests to this list in any other way
     def rem_request(self, request_id, ask_confirmation=False):
         with self.requests_list_lock:

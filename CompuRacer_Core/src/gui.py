@@ -69,12 +69,12 @@ class MainGUI(QMainWindow):
         vbox.addWidget(QLabel("Requests Information"))
 
         # --- Creating Table --- #
-        self.table_widget = QTableWidget(len(self.data_requests["requests"]), 7)
+        self.table_widget = QTableWidget(len(self.data_requests["requests"]), 8)
         self.table_widget.setColumnWidth(0, 30)
         self.table_widget.setColumnWidth(1, 400)
         self.table_widget.setColumnWidth(3, 200)
         self.table_widget.setColumnWidth(4, 100)
-        self.table_widget.setHorizontalHeaderLabels(["ID", "URL", "Method", "Timestamp", "Host", "Add To Batch", "Open"])
+        self.table_widget.setHorizontalHeaderLabels(["ID", "URL", "Method", "Timestamp", "Host", "Add To Batch", "Open", "Remove"])
         vbox.addWidget(self.table_widget)
 
         self.load_requests()
@@ -147,6 +147,22 @@ class MainGUI(QMainWindow):
 
         return None
 
+    def create_requests_button_widget(self, request, row) -> None:
+        add_request_button = QPushButton("Add", self)
+        window_button = QPushButton("Open", self)
+        remove_button = QPushButton("Remove", self)
+
+        add_request_button.clicked.connect(lambda _, request_id=str(request): self.add_request_to_batch(request_id))
+        window_button.clicked.connect(lambda _, request_id=request: self.new_request_window(request_id))
+        remove_button.clicked.connect(lambda _, request_id=request: self.remove_request(request_id))
+
+        self.request_buttons.append((add_request_button, window_button, remove_button))
+
+        self.table_widget.setCellWidget(row, 5, add_request_button)
+        self.table_widget.setCellWidget(row, 6, window_button)
+        self.table_widget.setCellWidget(row, 7, remove_button)
+        return None
+
     def load_requests(self) -> None:
         for idx, request in enumerate(self.data_requests["requests"]):
             # --- Insert row number {forloopnumber} --- #
@@ -154,13 +170,7 @@ class MainGUI(QMainWindow):
             self.table_widget.insertRow(row)
 
             # --- Create Buttons --- #
-            add_request_button = QPushButton("Add", self)
-            window_button = QPushButton("Open", self)
-
-            add_request_button.clicked.connect(lambda _, request_id=str(request): self.add_request_to_batch(request_id))
-            window_button.clicked.connect(lambda _, request_id=request: self.new_request_window(request_id))
-
-            self.request_buttons.append((add_request_button, window_button))
+            self.create_requests_button_widget(request, row)
 
             # --- Insert data into row --- #
             self.table_widget.setItem(row, 0, QTableWidgetItem(str(request)))
@@ -171,9 +181,6 @@ class MainGUI(QMainWindow):
             headers = self.data_requests["requests"][request].get("headers", {})
             host = headers.get("Host", "")
             self.table_widget.setItem(row, 4, QTableWidgetItem(str(host)))
-
-            self.table_widget.setCellWidget(row, 5, add_request_button)
-            self.table_widget.setCellWidget(row, 6, window_button)
 
         self.remove_empty_rows()
 
@@ -228,14 +235,16 @@ class MainGUI(QMainWindow):
         self.remove_empty_rows()
         return None
 
+    def remove_request(self, request_id):
+        self.racer.gui_remove_request(request_id)
+
     def add_request_to_batch(self, request_id) -> None:
         self.showNotification("RequestID " + request_id + " has been added to active Batch!")
         self.racer.comm_curr_add(self.state, request_id)
 
         return None
 
-    @staticmethod
-    def get_json_data(directory, name) -> dict:
+    def get_json_data(self, directory, name) -> dict:
         with open(os.path.join(directory, name + ".json"), "r") as file:
             data = json.load(file)
 
