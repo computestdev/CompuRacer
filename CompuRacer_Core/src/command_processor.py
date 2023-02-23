@@ -21,7 +21,7 @@ from src.connectgui import ConnectGUI
 from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import QApplication
 
-__version__ = "v1"
+__version__ = "v1.1.0"
 
 class GuiThread(QThread):
     start_gui_signal = pyqtSignal()
