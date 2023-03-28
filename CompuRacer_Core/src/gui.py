@@ -233,7 +233,6 @@ class MainGUI(QMainWindow):
         return None
 
     def add_request_to_batch(self, request_id) -> None:
-        self.showNotification("RequestID " + request_id + " has been added to active Batch!")
         self.racer.comm_curr_add(self.state, request_id)
 
         return None
@@ -299,7 +298,6 @@ class MainGUI(QMainWindow):
     def set_current_batch(self, batch_name) -> None:
         self.racer.set_curr_batch_by_name(batch_name)
         self.current_batch = batch_name
-        self.showNotification("Set current batch to " + batch_name)
 
         return None
 
@@ -324,24 +322,6 @@ class MainGUI(QMainWindow):
     def create_new_batch(self, batch_name) -> None:
         batch_name = batch_name.text()
         self.racer.gui_create_new_batch(batch_name)
-        self.showNotification("Added New Batch " + batch_name + ". Add a request to your batch so you can open your batch")
-
-        return None
-
-    @staticmethod
-    def showNotification(notifyText) -> None:
-        messageBox = QMessageBox()
-        messageBox.setIcon(QMessageBox.Information)
-        messageBox.setText(notifyText)
-
-        messageBox.setGeometry(0, 0, 500, 50)
-
-        timer = QTimer()
-        timer.setSingleShot(True)
-        timer.timeout.connect(messageBox.close)
-        timer.start(5000)
-
-        messageBox.exec()
 
         return None
 
@@ -487,23 +467,6 @@ class BatchWindow(QMainWindow):
 
         return None
 
-    @staticmethod
-    def showNotification(notifyText) -> None:
-        messageBox = QMessageBox()
-        messageBox.setIcon(QMessageBox.Information)
-        messageBox.setText(notifyText)
-
-        messageBox.setGeometry(0, 0, 500, 50)
-
-        timer = QTimer()
-        timer.setSingleShot(True)
-        timer.timeout.connect(messageBox.close)
-        timer.start(5000)
-
-        messageBox.exec()
-
-        return None
-
 
 class RequestWindow(QMainWindow):
     def __init__(self, request_id, racer, state, command_processor):
@@ -622,22 +585,5 @@ class RequestWindow(QMainWindow):
             self.general_window = RequestWindow(self.request_id, self.racer, self.state, self.command_processor)
             self.general_window.show()
             self.deleteLater()
-
-        return None
-
-    @staticmethod
-    def showNotification(notifyText) -> None:
-        messageBox = QMessageBox()
-        messageBox.setIcon(QMessageBox.Information)
-        messageBox.setText(notifyText)
-
-        messageBox.setGeometry(0, 0, 500, 50)
-
-        timer = QTimer()
-        timer.setSingleShot(True)
-        timer.timeout.connect(messageBox.close)
-        timer.start(5000)
-
-        messageBox.exec()
 
         return None
