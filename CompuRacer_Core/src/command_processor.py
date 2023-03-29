@@ -114,7 +114,7 @@ class CommandProcessor:
                     f"Command with key '{key}', new text: '{help_text}' is already in list of commands with current text: '{self.commands[key][2]}'")
             self.commands[key] = [calling_class, a_function, help_text, arg_spec, arg_spec_opt]
 
-    def start(self, cli_check, racer, state):
+    def start(self, use_only_cli, racer, state):
         self.racer = racer
         if 'cp_history' in self.config and self.config['cp_history']:
             self.last_execution = self.config['cp_history'][-1]
@@ -130,7 +130,7 @@ class CommandProcessor:
         self.printer_thread.setDaemon(True)
         self.printer_thread.start()
 
-        if not cli_check:
+        if not use_only_cli:
             self.gui_threading = threading.Thread(name='GUI Thread', target=self.gui_interpreter(state))
             self.gui_threading.setDaemon(True)
             self.gui_threading.start()

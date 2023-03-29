@@ -100,7 +100,7 @@ class CompuRacer:
     immediate_batch_name = "Imm"
     progress_bar_width = 100
 
-    def __init__(self, port, proxy, queue, cli_check):
+    def __init__(self, port, proxy, queue, use_only_cli):
         """
         Creates a new CompuRacer instance
         :param queue: the queue to be used when we want to display a filepicker dialog to the user
@@ -110,7 +110,7 @@ class CompuRacer:
         # if the queue is None, we cannot and will not show dialogs
         self.dialog_queue = queue
 
-        self.cli_check = cli_check
+        self.use_only_cli = use_only_cli
 
         # add shutdown hooks
         signal.signal(signal.SIGINT, self.force_shutdown)
@@ -201,7 +201,7 @@ class CompuRacer:
         if self.command_processor.is_changed():
             self.command_processor.set_changed(False)
 
-    def start(self, cli_check):
+    def start(self, use_only_cli):
         """
         Starts the CompuRacer
         """
@@ -224,7 +224,7 @@ class CompuRacer:
         self.print_formatted("Starting command processor..", utils.QType.INFORMATION)
         time.sleep(0.25)
         utils.clear_output()
-        self.command_processor.start(cli_check, self, self.state)
+        self.command_processor.start(use_only_cli, self, self.state)
 
     def comm_general_save(self, do_print=True):
         """
@@ -1059,7 +1059,7 @@ class CompuRacer:
                             self.rem_batch_by_name(self, self.immediate_batch_name, True)
                     if self.immediate_batch_name not in self.state['batches']:
                         # create new immediate batch
-                        if self.cli_check:
+                        if self.use_only_cli:
                             return self.comm_batches_create_new_static(self, self.immediate_batch_name, False,
                                                                        not used_from_interface,
                                                                        allow_redirects, sync_last_byte, send_timeout)
@@ -1221,7 +1221,7 @@ class CompuRacer:
         name = self.batch_index_to_name(self, index)
         if name == -1:
             return -1
-        if self.cli_check:
+        if self.use_only_cli:
             return self.set_curr_batch_by_name_static(self, name, immediate_allowed)
         else:
             return self.set_curr_batch_by_name(self, name, immediate_allowed)
