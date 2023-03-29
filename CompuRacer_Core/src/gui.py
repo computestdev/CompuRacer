@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QPushButton, QSystemTrayIcon, QMenu, QAction, QMainW
 from PyQt5.QtGui import QIcon
 
 
-def load_json_batches(directory) -> [str]:
+def load_json_batches_names(directory) -> [str]:
     file_names = []
     for filename in os.listdir(directory):
         if filename.endswith(".json"):
@@ -80,7 +80,7 @@ class RequestsGUI(QMainWindow):
         vbox.addWidget(QLabel("Batches Information"))
 
         directory = "state/batches"
-        file_names = load_json_batches(directory)
+        file_names = load_json_batches_names(directory)
 
         self.table_widget = QTableWidget(len(file_names), 6)
         self.table_widget.setColumnWidth(0, 400)
