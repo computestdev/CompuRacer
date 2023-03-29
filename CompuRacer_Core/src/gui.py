@@ -150,14 +150,18 @@ class MainGUI(QMainWindow):
     def create_requests_button_widget(self, request, row) -> None:
         add_request_button = QPushButton("Add", self)
         window_button = QPushButton("Open", self)
+        remove_button = QPushButton("Remove", self)
 
         add_request_button.clicked.connect(lambda _, request_id=str(request): self.add_request_to_batch(request_id))
         window_button.clicked.connect(lambda _, request_id=request: self.new_request_window(request_id))
+        remove_button.clicked.connect(lambda _, request_id=str(request): self.remove_request(request_id))
 
-        self.request_buttons.append((add_request_button, window_button))
+        self.request_buttons.append((add_request_button, window_button, remove_button))
 
         self.table_widget.setCellWidget(row, 5, add_request_button)
         self.table_widget.setCellWidget(row, 6, window_button)
+        self.table_widget.setCellWidget(row, 7, remove_button)
+
         return None
 
     def load_requests(self) -> None:
@@ -298,6 +302,11 @@ class MainGUI(QMainWindow):
     def set_current_batch(self, batch_name) -> None:
         self.racer.set_curr_batch_by_name(batch_name)
         self.current_batch = batch_name
+
+        return None
+
+    def remove_request(self, request_id) -> None:
+        self.racer.gui_comm_curr_remove(request_id)
 
         return None
 
