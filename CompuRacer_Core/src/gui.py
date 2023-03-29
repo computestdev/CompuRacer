@@ -265,7 +265,7 @@ class RequestsGUI(QMainWindow):
             self.deleteLater()
 
     def set_current_batch(self, batch_name) -> None:
-        self.racer.set_curr_batch_by_name(batch_name)
+        self.racer.set_curr_batch_by_name(self.racer, batch_name)
         self.current_batch = batch_name
         self.showNotification("Set current batch to " + batch_name)
         return None
@@ -280,7 +280,7 @@ class RequestsGUI(QMainWindow):
     def create_new_batch(self, batch_name):
         batch_name = batch_name.text()
 
-        self.racer.gui_create_new_batch(batch_name)
+        self.racer.comm_batches_create_new(self.racer, batch_name)
 
         self.showNotification("Added New Batch " + batch_name + ". Add a request to your batch so you can open your batch")
 

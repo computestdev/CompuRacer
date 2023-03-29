@@ -1059,14 +1059,9 @@ class CompuRacer:
                             self.rem_batch_by_name(self, self.immediate_batch_name, True)
                     if self.immediate_batch_name not in self.state['batches']:
                         # create new immediate batch
-                        if self.use_only_cli:
-                            return self.comm_batches_create_new_static(self, self.immediate_batch_name, False,
-                                                                       not used_from_interface,
-                                                                       allow_redirects, sync_last_byte, send_timeout)
-                        else:
-                            return self.comm_batches_create_new(self, self.immediate_batch_name, False,
-                                                                not used_from_interface,
-                                                                allow_redirects, sync_last_byte, send_timeout)
+                        return self.comm_batches_create_new(self, self.immediate_batch_name, False,
+                                                                    not used_from_interface,
+                                                                    allow_redirects, sync_last_byte, send_timeout)
 
                     immediate_batch = self.state['batches'][self.immediate_batch_name]
                     try:
@@ -1163,9 +1158,6 @@ class CompuRacer:
                 re.compile(r"'status_code': 4.."): utils.QType.RED,
                 re.compile(r"'status_code': 5.."): utils.QType.BLUE}
 
-    def gui_send_batches(self):
-        self.comm_batches_send(self)
-
     @staticmethod
     def comm_batches_send(self, index=None, print_results=True, immediate_allowed=False):
         name = self.batch_index_to_name(self, index)
@@ -1221,10 +1213,7 @@ class CompuRacer:
         name = self.batch_index_to_name(self, index)
         if name == -1:
             return -1
-        if self.use_only_cli:
-            return self.set_curr_batch_by_name_static(self, name, immediate_allowed)
-        else:
-            return self.set_curr_batch_by_name(self, name, immediate_allowed)
+        return self.set_curr_batch_by_name(self, name, immediate_allowed)
 
     @staticmethod
     def add_prefix(self, name):
@@ -1249,7 +1238,7 @@ class CompuRacer:
         self.print_formatted(f"Created a new batch:", utils.QType.INFORMATION)
         self.print_formatted(new_batch.get_summary(), utils.QType.BLUE)
         if set_current_batch:
-            return self.set_curr_batch_by_name_static(self, name)
+            return self.set_curr_batch_by_name(self, name)
 
     @staticmethod
     def comm_batches_get_project(self):
@@ -1471,14 +1460,6 @@ class CompuRacer:
         return indices[index]
 
     @staticmethod
-    def set_curr_batch_by_name_static(self, name, immediate_allowed=False):
-        if not immediate_allowed and name == self.immediate_batch_name:
-            self.print_formatted(f"Not allowed to set immediate batch as current batch from interface!",
-                                 utils.QType.ERROR)
-            return -1
-        self.__change_state('current_batch', name)
-        self.print_formatted(f"Set current batch to batch with name '{name}'.", utils.QType.INFORMATION)
-
     def set_curr_batch_by_name(self, name, immediate_allowed=False):
         if not immediate_allowed and name == self.immediate_batch_name:
             self.print_formatted(f"Not allowed to set immediate batch as current batch from interface!",
