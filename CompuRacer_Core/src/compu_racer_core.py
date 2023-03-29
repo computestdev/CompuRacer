@@ -1979,6 +1979,31 @@ class CompuRacer:
         else:
             self.print_formatted(f"Removal of current batch requests cancelled.", utils.QType.INFORMATION)
 
+    def gui_comm_curr_remove(self, request_id=None, wait_time=None):
+        """
+        Removes requests from the current batch
+        :param self: reference to the CompuRacer
+        :param request_id: the request to remove, or if None, all requests
+        :param wait_time: the wait_time of the request to remove, or if None, all regardless of wait_time
+        :return: 0 on success and -1 on error
+        """
+        if not self.state['current_batch']:
+            self.print_formatted(
+                f"Cannot remove a request from current batch: There is no current batch! First, select a current batch.",
+                utils.QType.ERROR)
+            return -1
+        curr_batch = self.state['batches'][self.state['current_batch']]
+        if curr_batch.is_empty():
+            self.print_formatted(f"Cannot remove a request from current batch: The current batch is empty!",
+                                 utils.QType.ERROR)
+            return -1
+        if request_id is None:
+            # remove all items from the batch
+            question = "Are you sure you want to remove all requests from the current batch?"
+        self.print_formatted("Dit is een andere test voor request nummer : " + request_id)
+
+        curr_batch.remove(request_id, wait_time)
+
     # ------------------------------------------------------------------------------------------------- #
     # ------------------------------------- Main helper functions ------------------------------------- #
     # ------------------------------------------------------------------------------------------------- #
