@@ -370,20 +370,13 @@ class BatchWindow(QMainWindow):
 
         return None
 
-    def create_requests_widget(self, vbox) -> None:
-        vbox.addWidget(QLabel(""))
-
+    def create_requests_widget(self, vbox):
         self.table_widget = QTableWidget()
+        vbox.addWidget(QLabel(""))
         self.table_widget.setColumnCount(5)
         self.table_widget.setHorizontalHeaderLabels(["ID", "URL", "Method", "Host", "Remove"])
-        self.table_widget.setColumnWidth(0, 50)
-        self.table_widget.setColumnWidth(1, 50)
-        self.table_widget.setColumnWidth(2, 300)
-        self.table_widget.setColumnWidth(3, 100)
 
         self.add_request_table()
-
-        return None
 
     def load_json(self, filepath):
         with open(filepath, 'r') as file:
