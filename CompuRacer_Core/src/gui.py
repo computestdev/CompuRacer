@@ -436,19 +436,12 @@ class BatchWindow(QMainWindow):
             self.table_widget.setItem(i, 1, QTableWidgetItem(method))
             self.table_widget.setItem(i, 2, QTableWidgetItem(url))
             self.table_widget.setItem(i, 3, QTableWidgetItem(host))
-
-            remove_item = QTableWidgetItem()
-            remove_item.setFlags(Qt.ItemIsEnabled)
-            self.table_widget.setItem(i, 4, remove_item)
-
-            remove_button = QPushButton("Remove")
-            remove_button.clicked.connect(lambda _, request_id=request_id: self.remove_request(request_id))
             self.table_widget.setCellWidget(i, 4, remove_button)
 
-        return None
+            remove_button.clicked.connect(lambda _, request_id=str(request_id): self.remove_request(request_id))
+            self.racer.print_formatted("Dit is een test voor request : " + request_id)
 
-    def remove_request(self, request_id):
-        self.racer.gui_remove_request(request_id)
+        return None
 
     def send_batch(self) -> None:
         self.save_data()
