@@ -9,8 +9,6 @@ class MainGUI:
         super().__init__()
         self.racer = racer
 
-        self.show_requests_gui(racer)
-
     def show_requests_gui(racer, app, state, cmdprocessor):
         requests_gui = RequestsGUI(racer, state, cmdprocessor)
 

@@ -50,17 +50,10 @@ if use_tkinter:
     root.withdraw()
 
 # --- Authorship information --- #
-__author__ = "R.J. van Emous @ Computest"
+__author__ = "R.J. van Emous @ Computest, B. van Wijk @ Computest"
 __license__ = "MIT License"
-__version__ = "2019"
-__email__ = "rvanemous@computest.nl"
-__status__ = "Prototype"
-
-# ---  Maintenance Developer information --- #
-__developer__ = "B. van Wijk @ Computest"
-__license__ = "MIT License"
-__version__ = "v1 2023"
-__email__ = "bvanwijk@computest.nl"
+__version__ = "v1.0.0 2023"
+__email__ = "rvanemous@computest.nl, bvanwijk@computest.nl"
 __status__ = "Production v1"
 
 # --- Checking for arguments --- #
@@ -83,7 +76,7 @@ parser.add_argument("--cli",
 args = parser.parse_args()
 
 # --- if --cli is used, this will be true --- #
-cli_check = args.cli
+use_only_cli = args.cli
 
 # -------------- main client program & server -------------- #
 if __name__ == '__main__':
@@ -95,12 +88,12 @@ if __name__ == '__main__':
 
     # initialize the racer
     if args.proxy:
-        racer = CompuRacer(args.port, f"socks5://{args.proxy}", dialog_queue, cli_check)
+        racer = CompuRacer(args.port, f"socks5://{args.proxy}", dialog_queue, use_only_cli)
     else:
-        racer = CompuRacer(args.port, None, dialog_queue, cli_check)
+        racer = CompuRacer(args.port, None, dialog_queue, use_only_cli)
 
     # start the racer
-    racer.start(cli_check, racer)
+    racer.start(use_only_cli)
 
     # listen for dialogs or wait
     while not racer.is_shutdown:
