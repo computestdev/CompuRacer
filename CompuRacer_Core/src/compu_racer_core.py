@@ -523,7 +523,7 @@ class CompuRacer:
                                            arg_spec_opt=[("Index of the batch", int, "* the current batch *"),
                                                          ("Print result summary", bool, True)]
                                            )
-        self.command_processor.add_command(["add bs", "add batch"], self.comm_batches_create_new_static,
+        self.command_processor.add_command(["add bs", "add batch"], self.comm_batches_create_new,
                                            "Creates a new batch by name and sets it as current batch (must be unique)",
                                            self,
                                            arg_spec=[("Name of the batch", str)],
@@ -624,7 +624,7 @@ class CompuRacer:
                                            "Sets the current batch send timout (default 20 seconds).", self,
                                            arg_spec_opt=[("send timeout >= 1", int, 20)]
                                            )
-        self.command_processor.add_command(["add"], self.comm_curr_add_static,
+        self.command_processor.add_command(["add"], self.comm_curr_add,
                                            "Adds a request to the current batch by ID, wait_time, parallel and sequential duplicates",
                                            self,
                                            arg_spec=[("Request ID", str)],
@@ -1234,7 +1234,7 @@ class CompuRacer:
             return self.state['project_name'] + name
 
     @staticmethod
-    def comm_batches_create_new_static(self, name, set_current_batch=True, immediate_allowed=False,
+    def comm_batches_create_new(self, name, set_current_batch=True, immediate_allowed=False,
                                        allow_redirects=False, sync_last_byte=False, send_timeout=20):
         if name != self.immediate_batch_name:
             name = self.add_prefix(self, name)
@@ -1250,9 +1250,6 @@ class CompuRacer:
         self.print_formatted(new_batch.get_summary(), utils.QType.BLUE)
         if set_current_batch:
             return self.set_curr_batch_by_name_static(self, name)
-
-    def gui_create_new_batch(self, name):
-        self.comm_batches_create_new_static(self, name)
 
     @staticmethod
     def comm_batches_get_project(self):
@@ -1798,7 +1795,7 @@ class CompuRacer:
 
     # NOTE: it does not overwrite an item with the same id & wait_time.
     @staticmethod
-    def comm_curr_add_static(self, request_id, wait_time=0, dup_par=1, dup_seq=1):
+    def comm_curr_add(self, request_id, wait_time=0, dup_par=1, dup_seq=1):
         """
         Adds the request with this wait time and the parallel and sequential values to the current batch
         :param self: reference to the CompuRacer
@@ -1815,37 +1812,6 @@ class CompuRacer:
                 utils.QType.ERROR)
             return -1
         if not self.state['current_batch']:
-            self.print_formatted(
-                f"Cannot add a request to current batch: There is no current batch! First, select a current batch.",
-                utils.QType.ERROR)
-            return -1
-        curr_batch = self.state['batches'][self.state['current_batch']]
-        try:
-            curr_batch.add(request_id, wait_time, dup_par, dup_seq, False)
-        except Exception as e:
-            self.print_formatted(f"Cannot add a request to current batch:\n\t{e}", utils.QType.ERROR)
-            return -1
-        self.print_formatted(f"The request was added to the current batch:\n"
-                             f"{curr_batch.get_info(request_id, wait_time)}",
-                             utils.QType.INFORMATION)
-
-    def comm_curr_add(self, state, request_id, wait_time=0, dup_par=1, dup_seq=1):
-        """
-        Adds the request with this wait time and the parallel and sequential values to the current batch
-        :param self: reference to the CompuRacer
-        :param request_id: the id of the request
-        :param wait_time: the wait time of the request before sending it
-        :param dup_par: the parallel duplication
-        :param dup_seq: the parallel sequential
-        :return: 0 on success and -1 on error
-        :return:
-        """
-        if request_id not in state['requests']:
-            self.print_formatted(
-                f"Cannot add a request to current batch: The request with id '{request_id}' is not in the request list!",
-                utils.QType.ERROR)
-            return -1
-        if not state['current_batch']:
             self.print_formatted(
                 f"Cannot add a request to current batch: There is no current batch! First, select a current batch.",
                 utils.QType.ERROR)

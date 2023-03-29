@@ -210,7 +210,7 @@ class RequestsGUI(QMainWindow):
     def add_request_to_batch(self, request_id):
         self.showNotification("RequestID " + request_id + " has been added to active Batch!")
 
-        self.racer.comm_curr_add(self.state, request_id)
+        self.racer.comm_curr_add(self.racer, request_id)
 
     def get_json_data(self, directory, name):
         with open(os.path.join(directory, name + ".json"), "r") as file:
