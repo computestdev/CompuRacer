@@ -21,3 +21,11 @@ async_timeout==3.0.1  # Apache 2.0
 
 #---- For batch.py ----#
 beautifulsoup4==4.7.1  # MIT
+
+#---- Right dependencies ----#
+certifi==2019.11.28
+requests==2.22.0
+jinja==2.10
+markupsafe==1.0
+setuptools==39.1.0
+itsdangerous==1.1.0

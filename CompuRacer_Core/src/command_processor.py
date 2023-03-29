@@ -16,9 +16,26 @@ from queue import Queue
 
 import src.utils as utils
 
+from src.maingui import MainGUI
+
+from PyQt5.QtCore import QThread, QObject, pyqtSignal
+from PyQt5.QtWidgets import QApplication
+
+__version__ = "v1"
+
+class GuiThread(QThread):
+    start_gui_signal = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+
+        self.app = QApplication([])
+
+    def run(self):
+        self.start_gui_signal.emit()
+
 
 class CommandProcessor:
-
     commands = {}
     welcome_function = None
     welcome_function_class = None
@@ -44,20 +61,24 @@ class CommandProcessor:
     print_queue = Queue()
 
     def __init__(self, config):
+        self.racer = None
         self.config = config
         # add built-in help commands
-        self.add_command(["help"], self.func_help, "Displays this help text, or all matching commands when a search query is provided", self,
+        self.add_command(["help"], self.func_help,
+                         "Displays this help text, or all matching commands when a search query is provided", self,
                          arg_spec_opt=[("Search for a command", str, "* all help commands *"),
                                        ("Find exact match", bool, False),
                                        ("Add command descriptions in search", bool, False)]
                          )
-        self.add_command(["h", "hist"], self.func_history, "Gets the command history since startup. Only unique and valid commands are logged.", self)
+        self.add_command(["h", "hist"], self.func_history,
+                         "Gets the command history since startup. Only unique and valid commands are logged.", self)
         self.add_command(["hc"], self.func_exec_history, "Executes the picked history command", self,
                          arg_spec_opt=[("The command number", int, "* the last command *")]
                          )
         self.add_command([""], self.func_exec_last, "Executes the last command again (even it is invalid)", self)
-        # todo remove ;)
-        self.add_command(["🤔"], lambda x: print("🤔"), "Repeats the thinking smiley", self)
+
+        self.gui_thread = GuiThread()
+        self.gui_thread.start_gui_signal.connect(self.gui_interpreter)
 
     def set_config(self, config):
         self.config = config
@@ -89,15 +110,17 @@ class CommandProcessor:
         """
         for key in keys:
             if key in self.commands:
-                raise Exception(f"Command with key '{key}', new text: '{help_text}' is already in list of commands with current text: '{self.commands[key][2]}'")
+                raise Exception(
+                    f"Command with key '{key}', new text: '{help_text}' is already in list of commands with current text: '{self.commands[key][2]}'")
             self.commands[key] = [calling_class, a_function, help_text, arg_spec, arg_spec_opt]
 
-    def start(self):
+    def start(self, use_only_cli, racer, state):
+        self.racer = racer
         if 'cp_history' in self.config and self.config['cp_history']:
             self.last_execution = self.config['cp_history'][-1]
         self.shutdown_processor = False
 
-        # start cli and processor
+        # start CLI and processor
         self.processor_thread = threading.Thread(name='Command processor interpreter', target=self.command_interpreter)
         self.processor_thread.setDaemon(True)
         self.processor_thread.start()
@@ -106,6 +129,18 @@ class CommandProcessor:
         self.printer_thread = threading.Thread(name='Command processor printer', target=self.intervalled_printer)
         self.printer_thread.setDaemon(True)
         self.printer_thread.start()
+
+        if not use_only_cli:
+            self.gui_threading = threading.Thread(name='GUI Thread', target=self.gui_interpreter(state))
+            self.gui_threading.setDaemon(True)
+            self.gui_threading.start()
+
+    def gui_interpreter(self, state):
+        self.print_formatted("Starting CompuRacer GUI..", utils.QType.PURPLE)
+        self.print_formatted("Starting GUI " + __version__ + "..", utils.QType.INFORMATION)
+        app = QApplication([])
+
+        MainGUI.show_requests_gui(self.racer, app, state, self)
 
     def command_interpreter(self):
         self.welcome_function(self.welcome_function_class)
@@ -154,13 +189,13 @@ class CommandProcessor:
 
         # print last items
         while self.processing_input:
-            pass # wait for processor to stop
+            pass  # wait for processor to stop
         for i in range(self.print_queue.qsize()):
             try:
                 print_item = self.print_queue.get()
                 self.print_formatted(print_item[0], print_item[1])
             except Queue.Empty as e:
-                pass # we are done (prematurely?)
+                pass  # we are done (prematurely?)
 
     def shutdown(self, do_print=True):
         if do_print:
@@ -377,7 +412,7 @@ class CommandProcessor:
 
     # print prompt, newline, go prompt-length to the right and one line up
     def print_prompt(self):
-        print(f"{self._get_cli_string()}\n\033[1A\033[{len(self.cli_prompt)+2}C", end='')
+        print(f"{self._get_cli_string()}\n\033[1A\033[{len(self.cli_prompt) + 2}C", end='')
 
     # prompts for a question and returns the result (only call from a command handler function)
     def accept_answer(self, question=None, string_type=utils.QType.NONE):
@@ -396,7 +431,8 @@ class CommandProcessor:
                 answer = answer_type(answer)
                 valid = True
             except TypeError as e:
-                self.print_formatted("Invalid answer '{}', must be of type '{}'".format(answer, answer_type), utils.QType.ERROR)
+                self.print_formatted("Invalid answer '{}', must be of type '{}'".format(answer, answer_type),
+                                     utils.QType.ERROR)
         return answer
 
     # prompts for a yes / no question and returns the result bool (only call from a command handler function)
@@ -466,7 +502,8 @@ class CommandProcessor:
                 if search_matches:
                     self.print_formatted("List of all matching commands:", utils.QType.INFORMATION)
                 else:
-                    self.print_formatted("No matches to help search query.\n\tUse 'help' to list all commands.", utils.QType.INFORMATION)
+                    self.print_formatted("No matches to help search query.\n\tUse 'help' to list all commands.",
+                                         utils.QType.INFORMATION)
         if not search_matches:
             if search_query:
                 return
@@ -514,7 +551,8 @@ class CommandProcessor:
     @staticmethod
     def func_exec_last(self):
         if not self.last_execution:
-            self.print_formatted(f"No last command to re-execute: this is the first command since startup.", utils.QType.ERROR)
+            self.print_formatted(f"No last command to re-execute: this is the first command since startup.",
+                                 utils.QType.ERROR)
             return -1
         self.print_formatted(f"Executing command: '{self.last_execution}'", utils.QType.INFORMATION)
         return self.process_answer(self.last_execution)
@@ -530,4 +568,3 @@ class CommandProcessor:
     # If it is called outside the class, make sure no other thread is printing anything
     def print_formatted(self, text, string_type=utils.QType.NONE):
         utils.print_formatted(text, string_type, colored_output=self.config['colored_output'])
-
