@@ -412,7 +412,18 @@ class BatchWindow(QMainWindow):
         items = self.load_json("state/batches/" + self.batch_name + ".json")["items"]
         requests = self.load_json("state/state.json")["requests"]
 
-        # --- Load in all data --- #
+        self.table_widget = QTableWidget(len(items), 5, self)
+        self.table_widget.setHorizontalHeaderLabels(["ID", "Method", "URL", "Host", "Remove"])
+        self.table_widget.setColumnWidth(0, 50)
+        self.table_widget.setColumnWidth(1, 50)
+        self.table_widget.setColumnWidth(2, 300)
+        self.table_widget.setColumnWidth(3, 100)
+        self.table_widget.setColumnWidth(4, 100)
+
+        remove_button = QPushButton("Remove", self)
+
+        self.table_widget.verticalHeader().hide()
+
         for i, item in enumerate(items):
             request_id = item["key"][0]
             request = requests[request_id]
@@ -455,6 +466,11 @@ class BatchWindow(QMainWindow):
 
     def save_data(self) -> None:
         self.racer.comm_general_save(True)
+
+        return None
+
+    def remove_request(self, request_id) -> None:
+        self.racer.gui_comm_curr_remove(request_id)
 
         return None
 
