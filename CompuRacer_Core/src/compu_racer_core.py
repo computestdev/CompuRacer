@@ -1130,12 +1130,6 @@ class CompuRacer:
                                          f"{used_in}. It must be removed individually.",
                                          utils.QType.ERROR)
                     return -1
-                # remove request from the batches
-                # if not self.command_processor.accept_yes_no(f"The request with id '{request_id}' is used by batches: "
-                #                                             f"{used_in}, continue?\n\tIt will be removed from these batches and their results are cleared!!",
-                #                                             utils.QType.WARNING):
-                #     return -1
-                # remove request from the batches
                 for batch_name in used_in:
                     self.state['batches'][batch_name].remove(request_id)
                 ask_confirmation = False
