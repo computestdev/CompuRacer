@@ -247,20 +247,20 @@ class MainGUI(QMainWindow):
 
         return data
 
-    def check_current_batch(self, name, row, current_button, window_button, current_batch) -> None:
+    def check_current_batch(self, name, row, button1, button2, current_batch) -> None:
         if name == current_batch:
             for col in range(self.table_widget.columnCount()):
                 item = self.table_widget.item(row, col)
                 if item is not None:
                     item.setBackground(Qt.gray)
-            current_button.setEnabled(False)
-            window_button.setEnabled(True)
+            button1.setEnabled(False)
+            button2.setEnabled(True)
         else:
-            window_button.setEnabled(False)
+            button2.setEnabled(False)
 
         if name == "Imm":
-            current_button.setEnabled(False)
-            window_button.setEnabled(False)
+            button1.setEnabled(False)
+            button2.setEnabled(False)
 
         return None
 
@@ -518,7 +518,7 @@ class RequestWindow(QMainWindow):
         self.update_json_timer.start(10000)
 
     def load_request(self) -> None:
-        requests_data = load_json("state/state.json")["requests"]
+        requests_data = self.load_json("state/state.json")["requests"]
         request_data = requests_data.get(str(self.request_id))
 
         if not request_data:
@@ -575,6 +575,12 @@ class RequestWindow(QMainWindow):
         vbox.addWidget(go_back_button, alignment=Qt.AlignBottom)
 
         return None
+
+    def load_json(self, filepath):
+        with open(filepath, 'r') as file:
+            data = json.load(file)
+
+        return data
 
     def go_back(self) -> None:
         self.general_window = MainGUI(self.racer, self.state, self.command_processor)
