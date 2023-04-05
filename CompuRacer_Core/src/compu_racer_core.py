@@ -261,6 +261,16 @@ class CompuRacer:
         elif do_print:
             self.print_formatted("Done.", string_type=utils.QType.INFORMATION)
 
+    def gui_storing_json(self):
+        """
+        Stores the current CompuRacer state via the GUI
+        """
+        state_to_save = copy.deepcopy(self.state)
+        state_to_save['batches'] = {}
+        self.__store_json(self.CLIENT_CONFIG, state_to_save, self.CLIENT_BACKUP)
+
+        self.print_formatted("Done storing.", string_type=utils.QType.INFORMATION)
+
     def comm_general_shutdown(self, args=None):
         """
         Shuts down the CompuRacer normally
@@ -523,7 +533,7 @@ class CompuRacer:
                                            arg_spec_opt=[("Index of the batch", int, "* the current batch *"),
                                                          ("Print result summary", bool, True)]
                                            )
-        self.command_processor.add_command(["add bs", "add batch"], self.comm_batches_create_new_static,
+        self.command_processor.add_command(["add bs", "add batch"], self.comm_batches_create_new,
                                            "Creates a new batch by name and sets it as current batch (must be unique)",
                                            self,
                                            arg_spec=[("Name of the batch", str)],
@@ -624,7 +634,7 @@ class CompuRacer:
                                            "Sets the current batch send timout (default 20 seconds).", self,
                                            arg_spec_opt=[("send timeout >= 1", int, 20)]
                                            )
-        self.command_processor.add_command(["add"], self.comm_curr_add_static,
+        self.command_processor.add_command(["add"], self.comm_curr_add,
                                            "Adds a request to the current batch by ID, wait_time, parallel and sequential duplicates",
                                            self,
                                            arg_spec=[("Request ID", str)],
@@ -1059,15 +1069,9 @@ class CompuRacer:
                             self.rem_batch_by_name(self, self.immediate_batch_name, True)
                     if self.immediate_batch_name not in self.state['batches']:
                         # create new immediate batch
-                        if self.cli_check:
-                            return self.comm_batches_create_new_static(self, self.immediate_batch_name, False,
-                                                                       not used_from_interface,
-                                                                       allow_redirects, sync_last_byte, send_timeout)
-                        else:
-                            return self.comm_batches_create_new(self, self.immediate_batch_name, False,
-                                                                not used_from_interface,
-                                                                allow_redirects, sync_last_byte, send_timeout)
-
+                        return self.comm_batches_create_new_st(self, self.immediate_batch_name, False,
+                                                                    not used_from_interface,
+                                                                    allow_redirects, sync_last_byte, send_timeout)
                     immediate_batch = self.state['batches'][self.immediate_batch_name]
                     try:
                         immediate_batch.add(req_id, 0, par, seq, False)
@@ -1110,10 +1114,6 @@ class CompuRacer:
             if self.state['batches'][batch_name].get(request_id):
                 used_in.append(batch_name)
         return used_in
-
-    def gui_remove_request(self, request_id):
-        curr_batch = self.state['batches'][self.state['current_batch']]
-        curr_batch.remove(request_id, None)
 
     @staticmethod  # do not add requests to this list in any other way
     def rem_request(self, request_id, ask_confirmation=False):
@@ -1160,9 +1160,6 @@ class CompuRacer:
                 re.compile(r"'status_code': 3.."): utils.QType.YELLOW,
                 re.compile(r"'status_code': 4.."): utils.QType.RED,
                 re.compile(r"'status_code': 5.."): utils.QType.BLUE}
-
-    def gui_send_batches(self):
-        self.comm_batches_send(self)
 
     @staticmethod
     def comm_batches_send(self, index=None, print_results=True, immediate_allowed=False):
@@ -1219,10 +1216,7 @@ class CompuRacer:
         name = self.batch_index_to_name(self, index)
         if name == -1:
             return -1
-        if self.cli_check:
-            return self.set_curr_batch_by_name_static(self, name, immediate_allowed)
-        else:
-            return self.set_curr_batch_by_name(self, name, immediate_allowed)
+        return self.set_curr_batch_by_name(self, name, immediate_allowed)
 
     @staticmethod
     def add_prefix(self, name):
@@ -1232,7 +1226,7 @@ class CompuRacer:
             return self.state['project_name'] + name
 
     @staticmethod
-    def comm_batches_create_new_static(self, name, set_current_batch=True, immediate_allowed=False,
+    def comm_batches_create_new(self, name, set_current_batch=True, immediate_allowed=False,
                                        allow_redirects=False, sync_last_byte=False, send_timeout=20):
         if name != self.immediate_batch_name:
             name = self.add_prefix(self, name)
@@ -1247,10 +1241,7 @@ class CompuRacer:
         self.print_formatted(f"Created a new batch:", utils.QType.INFORMATION)
         self.print_formatted(new_batch.get_summary(), utils.QType.BLUE)
         if set_current_batch:
-            return self.set_curr_batch_by_name_static(self, name)
-
-    def gui_create_new_batch(self, name):
-        self.comm_batches_create_new_static(self, name)
+            return self.set_curr_batch_by_name(self, name)
 
     @staticmethod
     def comm_batches_get_project(self):
@@ -1472,14 +1463,6 @@ class CompuRacer:
         return indices[index]
 
     @staticmethod
-    def set_curr_batch_by_name_static(self, name, immediate_allowed=False):
-        if not immediate_allowed and name == self.immediate_batch_name:
-            self.print_formatted(f"Not allowed to set immediate batch as current batch from interface!",
-                                 utils.QType.ERROR)
-            return -1
-        self.__change_state('current_batch', name)
-        self.print_formatted(f"Set current batch to batch with name '{name}'.", utils.QType.INFORMATION)
-
     def set_curr_batch_by_name(self, name, immediate_allowed=False):
         if not immediate_allowed and name == self.immediate_batch_name:
             self.print_formatted(f"Not allowed to set immediate batch as current batch from interface!",
@@ -1796,7 +1779,7 @@ class CompuRacer:
 
     # NOTE: it does not overwrite an item with the same id & wait_time.
     @staticmethod
-    def comm_curr_add_static(self, request_id, wait_time=0, dup_par=1, dup_seq=1):
+    def comm_curr_add(self, request_id, wait_time=0, dup_par=1, dup_seq=1):
         """
         Adds the request with this wait time and the parallel and sequential values to the current batch
         :param self: reference to the CompuRacer
@@ -1813,37 +1796,6 @@ class CompuRacer:
                 utils.QType.ERROR)
             return -1
         if not self.state['current_batch']:
-            self.print_formatted(
-                f"Cannot add a request to current batch: There is no current batch! First, select a current batch.",
-                utils.QType.ERROR)
-            return -1
-        curr_batch = self.state['batches'][self.state['current_batch']]
-        try:
-            curr_batch.add(request_id, wait_time, dup_par, dup_seq, False)
-        except Exception as e:
-            self.print_formatted(f"Cannot add a request to current batch:\n\t{e}", utils.QType.ERROR)
-            return -1
-        self.print_formatted(f"The request was added to the current batch:\n"
-                             f"{curr_batch.get_info(request_id, wait_time)}",
-                             utils.QType.INFORMATION)
-
-    def comm_curr_add(self, state, request_id, wait_time=0, dup_par=1, dup_seq=1):
-        """
-        Adds the request with this wait time and the parallel and sequential values to the current batch
-        :param self: reference to the CompuRacer
-        :param request_id: the id of the request
-        :param wait_time: the wait time of the request before sending it
-        :param dup_par: the parallel duplication
-        :param dup_seq: the parallel sequential
-        :return: 0 on success and -1 on error
-        :return:
-        """
-        if request_id not in state['requests']:
-            self.print_formatted(
-                f"Cannot add a request to current batch: The request with id '{request_id}' is not in the request list!",
-                utils.QType.ERROR)
-            return -1
-        if not state['current_batch']:
             self.print_formatted(
                 f"Cannot add a request to current batch: There is no current batch! First, select a current batch.",
                 utils.QType.ERROR)
@@ -1963,46 +1915,9 @@ class CompuRacer:
             self.print_formatted(f"Cannot remove a request from current batch: The current batch is empty!",
                                  utils.QType.ERROR)
             return -1
-        if request_id is None:
-            # remove all items from the batch
-            question = "Are you sure you want to remove all requests from the current batch?"
-        elif wait_time is None:
-            # remove all items with a certain ID from the batch
-            question = f"Are you sure you want to remove all requests with id '{request_id}' from the current batch?"
-        else:
-            # remove a specific item with a certain ID and wait_time from the batch
-            question = f"Are you sure you want to remove the request with id '{request_id}' and wait_time '{wait_time}' from the current batch?"
-        if self.command_processor.accept_yes_no(question, utils.QType.WARNING):
-            num_removed = curr_batch.remove(request_id, wait_time)
-            self.print_formatted(f"All matching requests are removed from the current batch.\nNumber: {num_removed}",
+        num_removed = curr_batch.remove(request_id, wait_time)
+        self.print_formatted(f"All matching requests are removed from the current batch.\nNumber: {num_removed}",
                                  utils.QType.INFORMATION)
-        else:
-            self.print_formatted(f"Removal of current batch requests cancelled.", utils.QType.INFORMATION)
-
-    def gui_comm_curr_remove(self, request_id=None, wait_time=None):
-        """
-        Removes requests from the current batch
-        :param self: reference to the CompuRacer
-        :param request_id: the request to remove, or if None, all requests
-        :param wait_time: the wait_time of the request to remove, or if None, all regardless of wait_time
-        :return: 0 on success and -1 on error
-        """
-        if not self.state['current_batch']:
-            self.print_formatted(
-                f"Cannot remove a request from current batch: There is no current batch! First, select a current batch.",
-                utils.QType.ERROR)
-            return -1
-        curr_batch = self.state['batches'][self.state['current_batch']]
-        if curr_batch.is_empty():
-            self.print_formatted(f"Cannot remove a request from current batch: The current batch is empty!",
-                                 utils.QType.ERROR)
-            return -1
-        if request_id is None:
-            # remove all items from the batch
-            question = "Are you sure you want to remove all requests from the current batch?"
-        self.print_formatted("Dit is een andere test voor request nummer : " + request_id)
-
-        curr_batch.remove(request_id, wait_time)
 
     # ------------------------------------------------------------------------------------------------- #
     # ------------------------------------- Main helper functions ------------------------------------- #
