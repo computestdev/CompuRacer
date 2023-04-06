@@ -174,6 +174,15 @@ class MainGUI(QMainWindow):
 
     def load_requests(self):
         self.load_json_requests()
+        rows_to_delete = []
+        for row in range(self.table_widget_requests.rowCount()):
+            request_id = self.table_widget_requests.item(row, 0).text()
+            if request_id not in self.data_requests["requests"]:
+                rows_to_delete.append(row)
+
+        for row in reversed(rows_to_delete):
+            self.table_widget_requests.removeRow(row)
+
         for request_id, request_data in self.data_requests["requests"].items():
             existing_row = None
             for row in range(self.table_widget_requests.rowCount()):
@@ -198,6 +207,8 @@ class MainGUI(QMainWindow):
                 headers = request_data.get("headers", {})
                 host = headers.get("Host", "")
                 self.table_widget_requests.setItem(row, 4, QTableWidgetItem(str(host)))
+
+                self.create_requests_button_widget(request_id, row)
 
     def load_batches(self, file_names, directory, current_batch) -> callable([]):
         self.batch_buttons.clear()
