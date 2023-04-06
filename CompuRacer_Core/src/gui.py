@@ -30,6 +30,7 @@ class MainGUI(QMainWindow):
         self.current_batch = None
         self.data_requests = None
         self.table_widget = None
+        self.table_widget_requests = None
 
         self.command_processor = command_processor
         self.racer = racer
@@ -69,17 +70,16 @@ class MainGUI(QMainWindow):
         vbox.addWidget(QLabel("Requests Information"))
 
         # --- Creating Table --- #
-        self.table_widget = QTableWidget(len(self.data_requests["requests"]), 8)
-        self.table_widget.setColumnWidth(0, 30)
-        self.table_widget.setColumnWidth(1, 400)
-        self.table_widget.setColumnWidth(3, 200)
-        self.table_widget.setColumnWidth(4, 100)
-        self.table_widget.setHorizontalHeaderLabels(["ID", "URL", "Method", "Timestamp", "Host", "Add To Batch", "Open", "Remove"])
-        vbox.addWidget(self.table_widget)
+        self.table_widget_requests = QTableWidget()
+        self.table_widget_requests.setColumnCount(8)
+        self.table_widget_requests.setHorizontalHeaderLabels(["ID", "URL", "Method", "Timestamp", "Host", "Add To Batch", "Open", "Remove"])
+        vbox.addWidget(self.table_widget_requests)
 
         self.load_requests()
+        self.update_json()
 
         requests_tab.setLayout(vbox)
+        self.table_widget_requests.show()
 
         return None
 
@@ -120,13 +120,21 @@ class MainGUI(QMainWindow):
         self.load_batches(file_names, directory, current_batch)
 
         # --- JSON Parsing Timer --- #
-        self.update_json_timer = QTimer()
-        self.update_json_timer.timeout.connect(self.reload_json)
-        self.update_json_timer.start(5000)
+        self.update_json()
 
         batches_tab.setLayout(vbox)
 
         return None
+
+    def update_json(self):
+        self.save_data()
+        self.load_requests()
+
+        print("python1")
+
+        self.update_json_timer = QTimer()
+        self.update_json_timer.timeout.connect(lambda: self.update_json())
+        self.update_json_timer.start(5000)
 
     def create_logs_widget(self, vbox, logs_tab) -> None:
         vbox.addWidget(QLabel("Logs"))
@@ -158,34 +166,38 @@ class MainGUI(QMainWindow):
 
         self.request_buttons.append((add_request_button, window_button, remove_button))
 
-        self.table_widget.setCellWidget(row, 5, add_request_button)
-        self.table_widget.setCellWidget(row, 6, window_button)
-        self.table_widget.setCellWidget(row, 7, remove_button)
+        self.table_widget_requests.setCellWidget(row, 5, add_request_button)
+        self.table_widget_requests.setCellWidget(row, 6, window_button)
+        self.table_widget_requests.setCellWidget(row, 7, remove_button)
 
         return None
 
-    def load_requests(self) -> None:
-        for idx, request in enumerate(self.data_requests["requests"]):
-            # --- Insert row number {forloopnumber} --- #
-            row = self.table_widget.rowCount()
-            self.table_widget.insertRow(row)
+    def load_requests(self):
+        self.load_json_requests()
+        for request_id, request_data in self.data_requests["requests"].items():
+            existing_row = None
+            for row in range(self.table_widget_requests.rowCount()):
+                if self.table_widget_requests.item(row, 0).text() == request_id:
+                    existing_row = row
+                    break
 
-            # --- Create Buttons --- #
-            self.create_requests_button_widget(request, row)
-
-            # --- Insert data into row --- #
-            self.table_widget.setItem(row, 0, QTableWidgetItem(str(request)))
-            self.table_widget.setItem(row, 1, QTableWidgetItem(str(self.data_requests["requests"][request]["url"])))
-            self.table_widget.setItem(row, 2, QTableWidgetItem(str(self.data_requests["requests"][request]["method"])))
-            self.table_widget.setItem(row, 3, QTableWidgetItem(str(self.data_requests["requests"][request]["timestamp"])))
-
-            headers = self.data_requests["requests"][request].get("headers", {})
-            host = headers.get("Host", "")
-            self.table_widget.setItem(row, 4, QTableWidgetItem(str(host)))
-
-        self.remove_empty_rows()
-
-        return None
+            if existing_row is not None:
+                self.table_widget_requests.setItem(existing_row, 1, QTableWidgetItem(str(request_data["url"])))
+                self.table_widget_requests.setItem(existing_row, 2, QTableWidgetItem(str(request_data["method"])))
+                self.table_widget_requests.setItem(existing_row, 3, QTableWidgetItem(str(request_data["timestamp"])))
+                headers = request_data.get("headers", {})
+                host = headers.get("Host", "")
+                self.table_widget_requests.setItem(existing_row, 4, QTableWidgetItem(str(host)))
+            else:
+                row = self.table_widget_requests.rowCount()
+                self.table_widget_requests.insertRow(row)
+                self.table_widget_requests.setItem(row, 0, QTableWidgetItem(str(request_id)))
+                self.table_widget_requests.setItem(row, 1, QTableWidgetItem(str(request_data["url"])))
+                self.table_widget_requests.setItem(row, 2, QTableWidgetItem(str(request_data["method"])))
+                self.table_widget_requests.setItem(row, 3, QTableWidgetItem(str(request_data["timestamp"])))
+                headers = request_data.get("headers", {})
+                host = headers.get("Host", "")
+                self.table_widget_requests.setItem(row, 4, QTableWidgetItem(str(host)))
 
     def load_batches(self, file_names, directory, current_batch) -> callable([]):
         self.batch_buttons.clear()
@@ -277,14 +289,12 @@ class MainGUI(QMainWindow):
 
         return None
 
-    def load_json_requests(self) -> None:
+    def load_json_requests(self):
         with open('state/state.json', 'r') as f:
             self.data_requests = json.load(f)
 
-        return None
-
     def save_data(self) -> None:
-        self.racer.comm_general_save(True)
+        self.racer.comm_general_save()
 
         return None
 
