@@ -261,16 +261,6 @@ class CompuRacer:
         elif do_print:
             self.print_formatted("Done.", string_type=utils.QType.INFORMATION)
 
-    def gui_storing_json(self):
-        """
-        Stores the current CompuRacer state via the GUI
-        """
-        state_to_save = copy.deepcopy(self.state)
-        state_to_save['batches'] = {}
-        self.__store_json(self.CLIENT_CONFIG, state_to_save, self.CLIENT_BACKUP)
-
-        self.print_formatted("Done storing.", string_type=utils.QType.INFORMATION)
-
     def comm_general_shutdown(self, args=None):
         """
         Shuts down the CompuRacer normally
