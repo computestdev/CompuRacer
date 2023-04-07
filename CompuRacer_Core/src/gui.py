@@ -31,6 +31,9 @@ class MainGUI(QMainWindow):
         self.data_requests = None
         self.table_widget = None
         self.table_widget_requests = None
+        self.table_widget_batches = None
+        self.file_names = None
+        self.directory = None
 
         self.command_processor = command_processor
         self.racer = racer
@@ -47,6 +50,9 @@ class MainGUI(QMainWindow):
         self.showFullScreen()
         self.setWindowTitle("CompuRacer GUI")
 
+        self.directory = "state/batches"
+        self.file_names = load_json_batches(self.directory)
+
         tabs = QTabWidget()
         general_tab = QWidget()
         logs_tab = QWidget()
@@ -62,6 +68,8 @@ class MainGUI(QMainWindow):
         self.create_batch_widget(vbox_general, general_tab)
         self.create_logs_widget(vbox_logs, logs_tab)
 
+        self.update_json()
+
         self.setCentralWidget(tabs)
 
         return None
@@ -75,29 +83,22 @@ class MainGUI(QMainWindow):
         self.table_widget_requests.setHorizontalHeaderLabels(["ID", "URL", "Method", "Timestamp", "Host", "Add To Batch", "Open", "Remove"])
         vbox.addWidget(self.table_widget_requests)
 
-        self.load_requests()
-        self.update_json()
-
         requests_tab.setLayout(vbox)
         self.table_widget_requests.show()
+
+        self.load_requests()
 
         return None
 
     def create_batch_widget(self, vbox, batches_tab) -> None:
         vbox.addWidget(QLabel("Batches Information"))
 
-        directory = "state/batches"
-        file_names = load_json_batches(directory)
-
         # --- Creating table --- #
-        self.table_widget = QTableWidget(len(file_names), 6)
-        self.table_widget.setColumnWidth(0, 400)
-        self.table_widget.setHorizontalHeaderLabels(["Name", "Allow Redirects", "Sync Last Byte", "Send Timeout", "Set Current Batch", "Open Batch"])
-        vbox.addWidget(self.table_widget)
-
-        # --- Clearing content before creating new --- #
-        self.table_widget.clearContents()
-        self.table_widget.setRowCount(0)
+        self.table_widget_batches = QTableWidget()
+        self.table_widget_batches.setColumnCount(6)
+        self.table_widget_batches.setColumnWidth(0, 400)
+        self.table_widget_batches.setHorizontalHeaderLabels(["Name", "Allow Redirects", "Sync Last Byte", "Send Timeout", "Set Current Batch", "Open Batch"])
+        vbox.addWidget(self.table_widget_batches)
 
         # --- Add new batch --- #
         add_batch_field = QLineEdit()
@@ -115,12 +116,7 @@ class MainGUI(QMainWindow):
         quit_button.clicked.connect(QApplication.quit)
         vbox.addWidget(quit_button)
 
-        # --- Load in all batches --- #
-        current_batch = self.data_requests["current_batch"]
-        self.load_batches(file_names, directory, current_batch)
-
-        # --- JSON Parsing Timer --- #
-        self.update_json()
+        self.load_batches()
 
         batches_tab.setLayout(vbox)
 
@@ -129,6 +125,7 @@ class MainGUI(QMainWindow):
     def update_json(self):
         self.save_data()
         self.load_requests()
+        self.load_batches()
 
         print("python1")
 
@@ -174,7 +171,9 @@ class MainGUI(QMainWindow):
 
     def load_requests(self):
         self.load_json_requests()
+
         rows_to_delete = []
+
         for row in range(self.table_widget_requests.rowCount()):
             request_id = self.table_widget_requests.item(row, 0).text()
             if request_id not in self.data_requests["requests"]:
@@ -210,11 +209,20 @@ class MainGUI(QMainWindow):
 
                 self.create_requests_button_widget(request_id, row)
 
-    def load_batches(self, file_names, directory, current_batch) -> callable([]):
+    def load_batches(self) -> callable([]):
+        self.directory = "state/batches"
+        self.file_names = load_json_batches(self.directory)
+
         self.batch_buttons.clear()
 
+        current_batch = self.data_requests["current_batch"]
+
+        # remove existing rows
+        for row in reversed(range(self.table_widget_batches.rowCount())):
+            self.table_widget_batches.removeRow(row)
+
         def load_table():
-            for idx, name in enumerate(file_names):
+            for idx, name in enumerate(self.file_names):
                 # --- Create command-buttons --- #
                 current_button = QPushButton("Set Current", self)
                 window_button = QPushButton("Open", self)
@@ -225,26 +233,24 @@ class MainGUI(QMainWindow):
                 self.batch_buttons.append((current_button, window_button))
 
                 # --- Insert row number {forloopnumber} --- #
-                row = self.table_widget.rowCount()
-                self.table_widget.insertRow(row)
-                self.table_widget.setItem(row, 0, QTableWidgetItem(str(name)))
-                self.table_widget.setCellWidget(row, 4, current_button)
-                self.table_widget.setCellWidget(row, 5, window_button)
+                row = self.table_widget_batches.rowCount()
+                self.table_widget_batches.insertRow(row)
+                self.table_widget_batches.setItem(row, 0, QTableWidgetItem(str(name)))
+                self.table_widget_batches.setCellWidget(row, 4, current_button)
+                self.table_widget_batches.setCellWidget(row, 5, window_button)
 
                 self.check_current_batch(name, row, current_button, window_button, current_batch)
 
-                data = self.get_json_data(directory, name)
+                data = self.get_json_data(name)
 
                 for col, col_name in enumerate(["Allow Redirects", "Sync Last Byte", "Send Timeout"]):
                     value = data.get(col_name.lower().replace(" ", "_"))
-                    self.table_widget.setItem(row, col + 1, QTableWidgetItem(str(value)))
+                    self.table_widget_batches.setItem(row, col + 1, QTableWidgetItem(str(value)))
 
                     if name == current_batch:
-                        item = self.table_widget.item(row, col + 1)
+                        item = self.table_widget_batches.item(row, col + 1)
                         if item is not None:
                             item.setBackground(Qt.gray)
-
-            self.remove_empty_rows()
 
         load_table()
 
@@ -256,7 +262,6 @@ class MainGUI(QMainWindow):
             self.table_widget.insertRow(row)
             self.table_widget.setItem(row, 0, QTableWidgetItem(str(command)))
 
-        self.remove_empty_rows()
         return None
 
     def add_request_to_batch(self, request_id) -> None:
@@ -264,16 +269,16 @@ class MainGUI(QMainWindow):
 
         return None
 
-    def get_json_data(self, directory, name) -> dict:
-        with open(os.path.join(directory, name + ".json"), "r") as file:
+    def get_json_data(self, name) -> dict:
+        with open(os.path.join(self.directory, name + ".json"), "r") as file:
             data = json.load(file)
 
         return data
 
     def check_current_batch(self, name, row, button1, button2, current_batch) -> None:
         if name == current_batch:
-            for col in range(self.table_widget.columnCount()):
-                item = self.table_widget.item(row, col)
+            for col in range(self.table_widget_batches.columnCount()):
+                item = self.table_widget_batches.item(row, col)
                 if item is not None:
                     item.setBackground(Qt.gray)
             button1.setEnabled(False)
@@ -287,36 +292,12 @@ class MainGUI(QMainWindow):
 
         return None
 
-    def remove_empty_rows(self) -> None:
-        for row in range(self.table_widget.rowCount() - 1, -1, -1):
-            empty = True
-            for col in range(self.table_widget.columnCount()):
-                item = self.table_widget.item(row, col)
-                if item is not None and not item.text().strip() == "":
-                    empty = False
-                    break
-            if empty:
-                self.table_widget.removeRow(row)
-
-        return None
-
     def load_json_requests(self):
         with open('state/state.json', 'r') as f:
             self.data_requests = json.load(f)
 
     def save_data(self) -> None:
         self.racer.comm_general_save()
-
-        return None
-
-    def reload_json(self) -> None:
-        if self.isActiveWindow():
-            self.save_data()
-            self.update_json_timer.stop()
-            self.hide()
-            self.general_window = MainGUI(self.racer, self.state, self.command_processor)
-            self.general_window.show()
-            self.deleteLater()
 
         return None
 
@@ -393,10 +374,6 @@ class BatchWindow(QMainWindow):
         self.create_requests_widget(vbox)
 
         vbox.insertWidget(0, self.table_widget)
-
-        self.update_json_timer = QTimer()
-        self.update_json_timer.timeout.connect(lambda: self.reload_json())
-        self.update_json_timer.start(10000)
 
         return None
 
@@ -488,17 +465,6 @@ class BatchWindow(QMainWindow):
 
         return None
 
-    def reload_json(self) -> None:
-        if self.isActiveWindow():
-            self.save_data()
-            self.update_json_timer.stop()
-            self.hide()
-            self.general_window = BatchWindow(self.batch_name, self.racer, self.state, self.command_processor)
-            self.general_window.show()
-            self.deleteLater()
-
-        return None
-
 
 class RequestWindow(QMainWindow):
     def __init__(self, request_id, racer, state, command_processor):
@@ -533,10 +499,6 @@ class RequestWindow(QMainWindow):
         self.load_request()
 
         vbox.insertWidget(0, self.table_widget)
-
-        self.update_json_timer = QTimer()
-        self.update_json_timer.timeout.connect(self.reload_json)
-        self.update_json_timer.start(10000)
 
     def load_request(self) -> None:
         requests_data = self.load_json("state/state.json")["requests"]
@@ -612,16 +574,5 @@ class RequestWindow(QMainWindow):
 
     def save_data(self) -> None:
         self.racer.comm_general_save(True)
-
-        return None
-
-    def reload_json(self) -> None:
-        if self.isActiveWindow():
-            self.save_data()
-            self.update_json_timer.stop()
-            self.hide()
-            self.general_window = RequestWindow(self.request_id, self.racer, self.state, self.command_processor)
-            self.general_window.show()
-            self.deleteLater()
 
         return None
