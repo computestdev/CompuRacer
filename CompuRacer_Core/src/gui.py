@@ -15,7 +15,6 @@ def load_json_batches(directory) -> List[Any]:
                 data = json.load(file)
                 if "name" in data:
                     file_names.append(data["name"])
-
     return file_names
 
 
@@ -68,8 +67,6 @@ class MainGUI(QMainWindow):
         self.create_batch_widget(vbox_general, general_tab)
         self.create_logs_widget(vbox_logs, logs_tab)
 
-        self.update_json()
-
         self.setCentralWidget(tabs)
 
         return None
@@ -80,6 +77,9 @@ class MainGUI(QMainWindow):
         # --- Creating Table --- #
         self.table_widget_requests = QTableWidget()
         self.table_widget_requests.setColumnCount(8)
+        self.table_widget_requests.setColumnWidth(0, 20)
+        self.table_widget_requests.setColumnWidth(1, 500)
+        self.table_widget_requests.setColumnWidth(3, 200)
         self.table_widget_requests.setHorizontalHeaderLabels(["ID", "URL", "Method", "Timestamp", "Host", "Add To Batch", "Open", "Remove"])
         vbox.addWidget(self.table_widget_requests)
 
@@ -122,16 +122,12 @@ class MainGUI(QMainWindow):
 
         return None
 
-    def update_json(self):
+    def update_json(self) -> None:
         self.save_data()
         self.load_requests()
         self.load_batches()
 
-        print("python1")
-
-        self.update_json_timer = QTimer()
-        self.update_json_timer.timeout.connect(lambda: self.update_json())
-        self.update_json_timer.start(5000)
+        return None
 
     def create_logs_widget(self, vbox, logs_tab) -> None:
         vbox.addWidget(QLabel("Logs"))
@@ -169,7 +165,7 @@ class MainGUI(QMainWindow):
 
         return None
 
-    def load_requests(self):
+    def load_requests(self) -> None:
         self.load_json_requests()
 
         rows_to_delete = []
@@ -208,6 +204,8 @@ class MainGUI(QMainWindow):
                 self.table_widget_requests.setItem(row, 4, QTableWidgetItem(str(host)))
 
                 self.create_requests_button_widget(request_id, row)
+
+        return None
 
     def load_batches(self) -> callable([]):
         self.directory = "state/batches"
@@ -267,6 +265,8 @@ class MainGUI(QMainWindow):
     def add_request_to_batch(self, request_id) -> None:
         self.racer.comm_curr_add(self.racer, request_id)
 
+        self.update_json()
+
         return None
 
     def get_json_data(self, name) -> dict:
@@ -292,9 +292,11 @@ class MainGUI(QMainWindow):
 
         return None
 
-    def load_json_requests(self):
+    def load_json_requests(self) -> None:
         with open('state/state.json', 'r') as f:
             self.data_requests = json.load(f)
+
+        return None
 
     def save_data(self) -> None:
         self.racer.comm_general_save()
@@ -305,10 +307,14 @@ class MainGUI(QMainWindow):
         self.racer.set_curr_batch_by_name(self.racer, batch_name)
         self.current_batch = batch_name
 
+        self.update_json()
+
         return None
 
     def remove_request(self, request_id) -> None:
         self.racer.comm_requests_remove(self.racer, request_id, None, False)
+
+        self.update_json()
 
         return None
 
@@ -333,6 +339,8 @@ class MainGUI(QMainWindow):
     def create_new_batch(self, batch_name) -> None:
         batch_name = batch_name.text()
         self.racer.comm_batches_create_new(self.racer, batch_name)
+
+        self.update_json()
 
         return None
 
@@ -377,7 +385,7 @@ class BatchWindow(QMainWindow):
 
         return None
 
-    def create_requests_widget(self, vbox):
+    def create_requests_widget(self, vbox) -> None:
         self.table_widget = QTableWidget()
         vbox.addWidget(QLabel(""))
         self.table_widget.setColumnCount(5)
@@ -385,7 +393,9 @@ class BatchWindow(QMainWindow):
 
         self.add_request_table()
 
-    def load_json(self, filepath):
+        return None
+
+    def load_json(self, filepath) -> List[Any]:
         with open(filepath, 'r') as file:
             data = json.load(file)
 

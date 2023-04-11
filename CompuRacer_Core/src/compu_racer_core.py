@@ -873,7 +873,7 @@ class CompuRacer:
         self.colorprint_comp_results(self, comp)
 
     @staticmethod  # do not add requests to this list in any other way
-    def comm_requests_remove(self, request_id_first=None, request_id_last=None, ask_confirmation=False):
+    def comm_requests_remove(self, request_id_first=None, request_id_last=None, ask_confirmation=True):
         with self.requests_list_lock:
             if not self.state['requests']:
                 self.print_formatted(f"There is no request to delete: The total request list is empty!",
@@ -895,16 +895,19 @@ class CompuRacer:
                     self.print_formatted(f"Removal of all requests cancelled.", utils.QType.INFORMATION)
                     return
             elif request_id_last is not None:
-                # remove a range of requests
-                for i, request_id in enumerate(copy.deepcopy(list(self.state['requests'].keys()))):
-                    if request_id_first <= request_id <= request_id_last:
-                        if self.rem_request(self, request_id, False) == -1:
-                            failed_requests.append(request_id)
-                        else:
-                            success_requests.append(request_id)
-                else:
-                    self.print_formatted(f"Removal of range of requests cancelled.", utils.QType.INFORMATION)
-                    return
+                if not ask_confirmation or self.command_processor.accept_yes_no(
+                        f"Are you sure you want to remove requests with id between and including {request_id_first} and {request_id_last}?",
+                        utils.QType.WARNING):
+                    # remove a range of requests
+                    for i, request_id in enumerate(copy.deepcopy(list(self.state['requests'].keys()))):
+                        if request_id_first <= request_id <= request_id_last:
+                            if self.rem_request(self, request_id, False) == -1:
+                                failed_requests.append(request_id)
+                            else:
+                                success_requests.append(request_id)
+                    else:
+                        self.print_formatted(f"Removal of range of requests cancelled.", utils.QType.INFORMATION)
+                        return
             else:
                 # remove one request
                 if self.rem_request(self, request_id_first, True) == -1:
@@ -1056,7 +1059,7 @@ class CompuRacer:
                             self.rem_batch_by_name(self, self.immediate_batch_name, True)
                     if self.immediate_batch_name not in self.state['batches']:
                         # create new immediate batch
-                        return self.comm_batches_create_new_st(self, self.immediate_batch_name, False,
+                        return self.comm_batches_create_new(self, self.immediate_batch_name, False,
                                                                     not used_from_interface,
                                                                     allow_redirects, sync_last_byte, send_timeout)
                     immediate_batch = self.state['batches'][self.immediate_batch_name]
@@ -1103,7 +1106,7 @@ class CompuRacer:
         return used_in
 
     @staticmethod  # do not add requests to this list in any other way
-    def rem_request(self, request_id, ask_confirmation=False):
+    def rem_request(self, request_id, ask_confirmation=True):
         with self.requests_list_lock:
             if request_id not in self.state['requests']:
                 self.print_formatted(f"Cannot remove request:\n\t"
@@ -1122,6 +1125,12 @@ class CompuRacer:
                                          f"{used_in}. It must be removed individually.",
                                          utils.QType.ERROR)
                     return -1
+                # remove request from the batches
+                if ask_confirmation:
+                    if not self.command_processor.accept_yes_no(f"The request with id '{request_id}' is used by batches: "
+                                                                f"{used_in}, continue?\n\tIt will be removed from these batches and their results are cleared!!",
+                                                                utils.QType.WARNING):
+                        return -1
                 for batch_name in used_in:
                     self.state['batches'][batch_name].remove(request_id)
                 ask_confirmation = False
