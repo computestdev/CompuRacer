@@ -910,7 +910,7 @@ class CompuRacer:
                         return
             else:
                 # remove one request
-                if self.rem_request(self, request_id_first, False) == -1:
+                if self.rem_request(self, request_id_first, True) == -1:
                     failed_requests.append(request_id_first)
                 else:
                     success_requests.append(request_id_first)
@@ -1120,28 +1120,14 @@ class CompuRacer:
                                          f"The request with id '{request_id}' is (also) used by the immediate batch!",
                                          utils.QType.ERROR)
                     return -1
-                if not ask_confirmation:
+                if self.cli_check:
                     self.print_formatted(f"The request with id '{request_id}' is used by batches: "
                                          f"{used_in}. It must be removed individually.",
                                          utils.QType.ERROR)
                     return -1
-                # remove request from the batches
-                if ask_confirmation:
-                    if not self.command_processor.accept_yes_no(f"The request with id '{request_id}' is used by batches: "
-                                                                f"{used_in}, continue?\n\tIt will be removed from these batches and their results are cleared!!",
-                                                                utils.QType.WARNING):
-                        return -1
                 for batch_name in used_in:
                     self.state['batches'][batch_name].remove(request_id)
                 ask_confirmation = False
-            if not ask_confirmation or self.command_processor.accept_yes_no(
-                    f"Are you sure you want to remove the request with id '{request_id}'?",
-                    utils.QType.WARNING):
-                self.__change_state('requests', sub_search=request_id, do_delete=True)
-                self.print_formatted(f"Request with id '{request_id}' is removed", utils.QType.INFORMATION)
-            else:
-                self.print_formatted(f"Removal of request cancelled.", utils.QType.INFORMATION)
-
             self.__change_state('requests', sub_search=request_id, do_delete=True)
             self.print_formatted(f"Request with id '{request_id}' is removed", utils.QType.INFORMATION)
 
