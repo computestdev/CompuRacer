@@ -910,7 +910,7 @@ class CompuRacer:
                         return
             else:
                 # remove one request
-                if self.rem_request(self, request_id_first, True) == -1:
+                if self.rem_request(self, request_id_first, False) == -1:
                     failed_requests.append(request_id_first)
                 else:
                     success_requests.append(request_id_first)
@@ -1134,6 +1134,13 @@ class CompuRacer:
                 for batch_name in used_in:
                     self.state['batches'][batch_name].remove(request_id)
                 ask_confirmation = False
+            if not ask_confirmation or self.command_processor.accept_yes_no(
+                    f"Are you sure you want to remove the request with id '{request_id}'?",
+                    utils.QType.WARNING):
+                self.__change_state('requests', sub_search=request_id, do_delete=True)
+                self.print_formatted(f"Request with id '{request_id}' is removed", utils.QType.INFORMATION)
+            else:
+                self.print_formatted(f"Removal of request cancelled.", utils.QType.INFORMATION)
 
             self.__change_state('requests', sub_search=request_id, do_delete=True)
             self.print_formatted(f"Request with id '{request_id}' is removed", utils.QType.INFORMATION)
@@ -1906,9 +1913,23 @@ class CompuRacer:
             self.print_formatted(f"Cannot remove a request from current batch: The current batch is empty!",
                                  utils.QType.ERROR)
             return -1
+        if self.cli_check:
+            if request_id is None:
+                # remove all items from the batch
+                question = "Are you sure you want to remove all requests from the current batch?"
+            elif wait_time is None:
+                # remove all items with a certain ID from the batch
+                question = f"Are you sure you want to remove all requests with id '{request_id}' from the current batch?"
+            else:
+                # remove a specific item with a certain ID and wait_time from the batch
+                question = f"Are you sure you want to remove the request with id '{request_id}' and wait_time '{wait_time}' from the current batch?"
+            if self.command_processor.accept_yes_no(question, utils.QType.WARNING):
+                num_removed = curr_batch.remove(request_id, wait_time)
+                self.print_formatted(f"All matching requests are removed from the current batch.\nNumber: {num_removed}",
+                                     utils.QType.INFORMATION)
         num_removed = curr_batch.remove(request_id, wait_time)
         self.print_formatted(f"All matching requests are removed from the current batch.\nNumber: {num_removed}",
-                                 utils.QType.INFORMATION)
+                             utils.QType.INFORMATION)
 
     # ------------------------------------------------------------------------------------------------- #
     # ------------------------------------- Main helper functions ------------------------------------- #
