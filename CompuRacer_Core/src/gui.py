@@ -320,7 +320,6 @@ class MainGUI(QMainWindow):
 
     def new_batch_window(self, batch_name) -> None:
         self.save_data()
-        self.update_json_timer.stop()
         self.batch_window = BatchWindow(batch_name, self.racer, self.state, self.command_processor)
         self.batch_window.show()
         self.hide()
