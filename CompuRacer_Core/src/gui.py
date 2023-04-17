@@ -378,19 +378,10 @@ class BatchWindow(QMainWindow):
 
         self.add_button_widget(vbox)
         self.setCentralWidget(tabs)
-        self.create_requests_widget(vbox)
+        self.add_request_table(vbox)
+        self.add_propperty_widget(vbox)
 
         vbox.insertWidget(0, self.table_widget)
-
-        return None
-
-    def create_requests_widget(self, vbox) -> None:
-        self.table_widget = QTableWidget()
-        vbox.addWidget(QLabel(""))
-        self.table_widget.setColumnCount(5)
-        self.table_widget.setHorizontalHeaderLabels(["ID", "URL", "Method", "Host", "Remove"])
-
-        self.add_request_table()
 
         return None
 
@@ -399,6 +390,47 @@ class BatchWindow(QMainWindow):
             data = json.load(file)
 
         return data
+
+    def update_json(self) -> None:
+        self.save_data()
+        self.load_requests()
+
+        return None
+
+    def add_propperty_widget(self, vbox) -> None:
+        allow_redirects = self.load_json("state/batches/" + self.batch_name + ".json")["allow_redirects"]
+        sync_last_byte = self.load_json("state/batches/" + self.batch_name + ".json")["sync_last_byte"]
+        send_tiemout = self.load_json("state/batches/" + self.batch_name + ".json")["send_timeout"]
+
+        change_allow_redirects_field = QLineEdit()
+        change_allow_redirects_button = QPushButton("Change Allow_Redirects", self)
+        change_allow_redirects_button.clicked.connect(lambda _, input_field=change_allow_redirects_field: self.change_allow_redirects(input_field))
+
+        change_sync_last_byte_field = QLineEdit()
+        change_sync_last_byte_button = QPushButton("Change Sync_Last_Byte", self)
+        change_sync_last_byte_button.clicked.connect(lambda _, input_field=change_sync_last_byte_field: self.change_sync_last_byte(input_field))
+
+        change_send_timeout_field = QLineEdit()
+        change_send_timeout_button = QPushButton("Change Send_Timeout", self)
+        change_send_timeout_button.clicked.connect(lambda _, input_field=change_send_timeout_field: self.change_send_timeout(input_field))
+
+        hbox = QHBoxLayout()
+        hbox.addWidget(change_allow_redirects_field)
+        hbox.addWidget(change_allow_redirects_button)
+
+        hbox.addWidget(change_sync_last_byte_field)
+        hbox.addWidget(change_sync_last_byte_button)
+
+        hbox.addWidget(change_send_timeout_field)
+        hbox.addWidget(change_send_timeout_button)
+
+        vbox.addLayout(hbox)
+
+        return None
+
+    def add_propperties(self, vbox) -> None:
+
+        return None
 
     def add_button_widget(self, vbox) -> None:
         send_batch_button = QPushButton("Send Batch")
@@ -415,21 +447,44 @@ class BatchWindow(QMainWindow):
 
         return None
 
-    def add_request_table(self) -> None:
-        items = self.load_json("state/batches/" + self.batch_name + ".json")["items"]
-        requests = self.load_json("state/state.json")["requests"]
-
-        self.table_widget = QTableWidget(len(items), 5, self)
+    def add_request_table(self, vbox) -> None:
+        self.table_widget = QTableWidget()
+        self.table_widget.setColumnCount(5)
         self.table_widget.setHorizontalHeaderLabels(["ID", "Method", "URL", "Host", "Remove"])
         self.table_widget.setColumnWidth(0, 50)
         self.table_widget.setColumnWidth(1, 50)
-        self.table_widget.setColumnWidth(2, 300)
+        self.table_widget.setColumnWidth(2, 600)
         self.table_widget.setColumnWidth(3, 100)
         self.table_widget.setColumnWidth(4, 100)
 
+        vbox.addWidget(self.table_widget)
+
+        self.load_requests()
+
+        return None
+
+    def change_allow_redirects(self, value):
+        value.text()
+
+        return None
+
+    def change_sync_last_byte(self, value):
+        value.text()
+
+        return None
+
+    def change_send_timeout(self, value):
+        value.text()
+
+        return None
+
+    def load_requests(self) -> None:
+        items = self.load_json("state/batches/" + self.batch_name + ".json")["items"]
+        requests = self.load_json("state/state.json")["requests"]
         remove_button = QPushButton("Remove", self)
 
-        self.table_widget.verticalHeader().hide()
+        # set the number of rows in the table widget
+        self.table_widget.setRowCount(len(items))
 
         for i, item in enumerate(items):
             request_id = item["key"][0]
@@ -446,9 +501,6 @@ class BatchWindow(QMainWindow):
             self.table_widget.setCellWidget(i, 4, remove_button)
 
             remove_button.clicked.connect(lambda _, request_id=str(request_id): self.remove_request(request_id))
-            self.racer.print_formatted("Dit is een test voor request : " + request_id)
-
-        return None
 
     def send_batch(self) -> None:
         self.save_data()
@@ -471,6 +523,8 @@ class BatchWindow(QMainWindow):
 
     def remove_request(self, request_id) -> None:
         self.racer.comm_curr_remove(self.racer, request_id)
+
+        self.update_json()
 
         return None
 
