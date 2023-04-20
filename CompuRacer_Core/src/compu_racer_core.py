@@ -100,7 +100,7 @@ class CompuRacer:
     immediate_batch_name = "Imm"
     progress_bar_width = 100
 
-    def __init__(self, port, proxy, queue, use_only_cli):
+    def __init__(self, port, proxy, queue, cli_check):
         """
         Creates a new CompuRacer instance
         :param queue: the queue to be used when we want to display a filepicker dialog to the user
@@ -110,7 +110,7 @@ class CompuRacer:
         # if the queue is None, we cannot and will not show dialogs
         self.dialog_queue = queue
 
-        self.use_only_cli = use_only_cli
+        self.cli_check = cli_check
 
         # add shutdown hooks
         signal.signal(signal.SIGINT, self.force_shutdown)
@@ -201,7 +201,7 @@ class CompuRacer:
         if self.command_processor.is_changed():
             self.command_processor.set_changed(False)
 
-    def start(self, use_only_cli):
+    def start(self, cli_check, racer):
         """
         Starts the CompuRacer
         """
@@ -224,7 +224,7 @@ class CompuRacer:
         self.print_formatted("Starting command processor..", utils.QType.INFORMATION)
         time.sleep(0.25)
         utils.clear_output()
-        self.command_processor.start(use_only_cli, self, self.state)
+        self.command_processor.start(cli_check, racer, self.state)
 
     def comm_general_save(self, do_print=True):
         """
@@ -910,7 +910,7 @@ class CompuRacer:
                         return
             else:
                 # remove one request
-                if self.rem_request(self, request_id_first, True) == -1:
+                if self.rem_request(self, request_id_first, False) == -1:
                     failed_requests.append(request_id_first)
                 else:
                     success_requests.append(request_id_first)
@@ -1062,7 +1062,6 @@ class CompuRacer:
                         return self.comm_batches_create_new(self, self.immediate_batch_name, False,
                                                                     not used_from_interface,
                                                                     allow_redirects, sync_last_byte, send_timeout)
-
                     immediate_batch = self.state['batches'][self.immediate_batch_name]
                     try:
                         immediate_batch.add(req_id, 0, par, seq, False)
@@ -1106,10 +1105,6 @@ class CompuRacer:
                 used_in.append(batch_name)
         return used_in
 
-    def gui_remove_request(self, request_id):
-        curr_batch = self.state['batches'][self.state['current_batch']]
-        curr_batch.remove(request_id, None)
-
     @staticmethod  # do not add requests to this list in any other way
     def rem_request(self, request_id, ask_confirmation=True):
         with self.requests_list_lock:
@@ -1139,6 +1134,13 @@ class CompuRacer:
                 for batch_name in used_in:
                     self.state['batches'][batch_name].remove(request_id)
                 ask_confirmation = False
+            if not ask_confirmation or self.command_processor.accept_yes_no(
+                    f"Are you sure you want to remove the request with id '{request_id}'?",
+                    utils.QType.WARNING):
+                self.__change_state('requests', sub_search=request_id, do_delete=True)
+                self.print_formatted(f"Request with id '{request_id}' is removed", utils.QType.INFORMATION)
+            else:
+                self.print_formatted(f"Removal of request cancelled.", utils.QType.INFORMATION)
 
             self.__change_state('requests', sub_search=request_id, do_delete=True)
             self.print_formatted(f"Request with id '{request_id}' is removed", utils.QType.INFORMATION)
@@ -1911,46 +1913,23 @@ class CompuRacer:
             self.print_formatted(f"Cannot remove a request from current batch: The current batch is empty!",
                                  utils.QType.ERROR)
             return -1
-        if request_id is None:
-            # remove all items from the batch
-            question = "Are you sure you want to remove all requests from the current batch?"
-        elif wait_time is None:
-            # remove all items with a certain ID from the batch
-            question = f"Are you sure you want to remove all requests with id '{request_id}' from the current batch?"
-        else:
-            # remove a specific item with a certain ID and wait_time from the batch
-            question = f"Are you sure you want to remove the request with id '{request_id}' and wait_time '{wait_time}' from the current batch?"
-        if self.command_processor.accept_yes_no(question, utils.QType.WARNING):
-            num_removed = curr_batch.remove(request_id, wait_time)
-            self.print_formatted(f"All matching requests are removed from the current batch.\nNumber: {num_removed}",
-                                 utils.QType.INFORMATION)
-        else:
-            self.print_formatted(f"Removal of current batch requests cancelled.", utils.QType.INFORMATION)
-
-    def gui_comm_curr_remove(self, request_id=None, wait_time=None):
-        """
-        Removes requests from the current batch
-        :param self: reference to the CompuRacer
-        :param request_id: the request to remove, or if None, all requests
-        :param wait_time: the wait_time of the request to remove, or if None, all regardless of wait_time
-        :return: 0 on success and -1 on error
-        """
-        if not self.state['current_batch']:
-            self.print_formatted(
-                f"Cannot remove a request from current batch: There is no current batch! First, select a current batch.",
-                utils.QType.ERROR)
-            return -1
-        curr_batch = self.state['batches'][self.state['current_batch']]
-        if curr_batch.is_empty():
-            self.print_formatted(f"Cannot remove a request from current batch: The current batch is empty!",
-                                 utils.QType.ERROR)
-            return -1
-        if request_id is None:
-            # remove all items from the batch
-            question = "Are you sure you want to remove all requests from the current batch?"
-        self.print_formatted("Dit is een andere test voor request nummer : " + request_id)
-
-        curr_batch.remove(request_id, wait_time)
+        if self.cli_check:
+            if request_id is None:
+                # remove all items from the batch
+                question = "Are you sure you want to remove all requests from the current batch?"
+            elif wait_time is None:
+                # remove all items with a certain ID from the batch
+                question = f"Are you sure you want to remove all requests with id '{request_id}' from the current batch?"
+            else:
+                # remove a specific item with a certain ID and wait_time from the batch
+                question = f"Are you sure you want to remove the request with id '{request_id}' and wait_time '{wait_time}' from the current batch?"
+            if self.command_processor.accept_yes_no(question, utils.QType.WARNING):
+                num_removed = curr_batch.remove(request_id, wait_time)
+                self.print_formatted(f"All matching requests are removed from the current batch.\nNumber: {num_removed}",
+                                     utils.QType.INFORMATION)
+        num_removed = curr_batch.remove(request_id, wait_time)
+        self.print_formatted(f"All matching requests are removed from the current batch.\nNumber: {num_removed}",
+                             utils.QType.INFORMATION)
 
     # ------------------------------------------------------------------------------------------------- #
     # ------------------------------------- Main helper functions ------------------------------------- #
