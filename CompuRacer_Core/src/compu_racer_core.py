@@ -201,7 +201,7 @@ class CompuRacer:
         if self.command_processor.is_changed():
             self.command_processor.set_changed(False)
 
-    def start(self, cli_check, racer):
+    def start(self, cli_check):
         """
         Starts the CompuRacer
         """
@@ -224,7 +224,7 @@ class CompuRacer:
         self.print_formatted("Starting command processor..", utils.QType.INFORMATION)
         time.sleep(0.25)
         utils.clear_output()
-        self.command_processor.start(cli_check, racer, self.state)
+        self.command_processor.start(cli_check, self, self.state)
 
     def comm_general_save(self, do_print=True):
         """
