@@ -237,7 +237,7 @@ class MainGUI(QMainWindow):
         return None
 
     def add_request_to_batch(self, request_id) -> None:
-        self.racer.comm_curr_add(self.state, request_id)
+        self.racer.comm_curr_add(self.racer, request_id)
 
         return None
 
@@ -300,13 +300,13 @@ class MainGUI(QMainWindow):
         return None
 
     def set_current_batch(self, batch_name) -> None:
-        self.racer.set_curr_batch_by_name(batch_name)
+        self.racer.set_curr_batch_by_name(self.racer, batch_name)
         self.current_batch = batch_name
 
         return None
 
     def remove_request(self, request_id) -> None:
-        self.racer.gui_comm_curr_remove(request_id)
+        self.racer.comm_requests_remove(self.racer, request_id, None, False)
 
         return None
 
@@ -330,7 +330,7 @@ class MainGUI(QMainWindow):
 
     def create_new_batch(self, batch_name) -> None:
         batch_name = batch_name.text()
-        self.racer.gui_create_new_batch(batch_name)
+        self.racer.comm_batches_create_new(self.racer, batch_name)
 
         return None
 
@@ -446,7 +446,7 @@ class BatchWindow(QMainWindow):
     def send_batch(self) -> None:
         self.save_data()
         self.update_json_timer.stop()
-        self.racer.gui_send_batches()
+        self.racer.comm_batches_send(self.racer)
 
         return None
 
@@ -463,7 +463,7 @@ class BatchWindow(QMainWindow):
         return None
 
     def remove_request(self, request_id) -> None:
-        self.racer.gui_comm_curr_remove(request_id)
+        self.racer.comm_curr_remove(self.racer, request_id)
 
         return None
 
