@@ -2,9 +2,12 @@ import json
 import os
 from typing import List, Any
 
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtWidgets import QPushButton, QMainWindow, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QTabWidget, QWidget, QMessageBox, QLineEdit, QHBoxLayout, QApplication, QHeaderView, QTableView
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QStandardItem, QStandardItemModel
+from PyQt5.QtWidgets import QPushButton, QMainWindow, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QTabWidget, \
+    QWidget, QLineEdit, QHBoxLayout, QApplication, QHeaderView, QTableView
+
+from src.batch import Batch
 
 
 def load_json_batches(directory) -> List[Any]:
@@ -23,7 +26,6 @@ class MainGUI(QMainWindow):
         super().__init__()
 
         self.request_window = None
-        self.update_json_timer = None
         self.general_window = None
         self.batch_window = None
         self.current_batch = None
@@ -327,8 +329,7 @@ class MainGUI(QMainWindow):
         return None
 
     def new_request_window(self, request_id) -> None:
-        self.save_data()
-        self.update_json_timer.stop()
+        self.update_json()
         self.request_window = RequestWindow(request_id, self.racer, self.state, self.command_processor)
         self.request_window.show()
         self.hide()
@@ -352,9 +353,8 @@ class BatchWindow(QMainWindow):
         self.showFullScreen()
         self.setWindowTitle("Batch: " + batch_name)
 
-        self.update_json_timer = None
         self.general_window = None
-        self.table_widget = None
+        self.table_widget = QTableWidget()
 
         self.racer = racer
         self.batch_name = batch_name
@@ -385,7 +385,6 @@ class BatchWindow(QMainWindow):
 
         vbox.insertWidget(0, self.table_widget)
 
-        # Add batch_tab to tabs widget
         tabs.addTab(batch_tab, "Batch")
 
         return None
@@ -405,8 +404,8 @@ class BatchWindow(QMainWindow):
 
     def add_batch_propperty_widget(self, vbox) -> None:
         self.table_widget_propperty = QTableWidget()
-        self.table_widget_propperty.setColumnCount(3)
-        self.table_widget_propperty.setHorizontalHeaderLabels(["Allow Redirects", "Sync Last Byte", "Send Timeout"])
+        self.table_widget_propperty.setColumnCount(4)
+        self.table_widget_propperty.setHorizontalHeaderLabels(["Allow Redirects", "Sync Last Byte", "Send Timeout", "Batch Sent"])
         vbox.addWidget(self.table_widget_propperty)
 
         self.add_propperty_widget(vbox)
@@ -441,16 +440,17 @@ class BatchWindow(QMainWindow):
         allow_redirects = properties["allow_redirects"]
         sync_last_byte = properties["sync_last_byte"]
         send_timeout = properties["send_timeout"]
-
-        print(allow_redirects)
-        print(sync_last_byte)
-        print(send_timeout)
+        sent_batch = properties["results"]
 
         self.table_widget_propperty.setRowCount(1)
 
-        self.table_widget_propperty.setItem(0, 0, QTableWidgetItem("test"))
+        self.table_widget_propperty.setItem(0, 0, QTableWidgetItem(str(allow_redirects)))
         self.table_widget_propperty.setItem(0, 1, QTableWidgetItem(str(sync_last_byte)))
         self.table_widget_propperty.setItem(0, 2, QTableWidgetItem(str(send_timeout)))
+        if len(sent_batch) == 0:
+            self.table_widget_propperty.setItem(0, 3, QTableWidgetItem("False"))
+        else:
+            self.table_widget_propperty.setItem(0, 3, QTableWidgetItem("True"))
 
         return None
 
@@ -470,7 +470,6 @@ class BatchWindow(QMainWindow):
         return None
 
     def add_request_table(self, vbox) -> None:
-        self.table_widget = QTableWidget()
         self.table_widget.setColumnCount(8)
         self.table_widget.setHorizontalHeaderLabels(["ID", "Method", "URL", "Host", "Delay Time", "Num Parallel", "Num Sequential", "Remove"])
         self.table_widget.setColumnWidth(0, 50)
@@ -510,10 +509,11 @@ class BatchWindow(QMainWindow):
         return None
 
     def change_send_timeout(self, value):
-        send_timeout = int(value.text())
+        if value.text().isdigit():
+            send_timeout = int(value.text())
 
-        self.racer.comm_curr_change_timeout(self.racer, send_timeout)
-        self.update_json()
+            self.racer.comm_curr_change_timeout(self.racer, send_timeout)
+            self.update_json()
 
         return None
 
@@ -522,7 +522,6 @@ class BatchWindow(QMainWindow):
         requests = self.load_json("state/state.json")["requests"]
         remove_button = QPushButton("Remove", self)
 
-        # set the number of rows in the table widget
         self.table_widget.setRowCount(len(items))
 
         for i, item in enumerate(items):
@@ -550,8 +549,9 @@ class BatchWindow(QMainWindow):
 
     def send_batch(self) -> None:
         self.save_data()
-        self.update_json_timer.stop()
         self.racer.comm_batches_send(self.racer)
+
+        self.update_json()
 
         return None
 
@@ -585,7 +585,6 @@ class RequestWindow(QMainWindow):
         self.command_processor = command_processor
 
         self.general_window = None
-        self.update_json_timer = None
 
         self.table_widget = QWidget()
 
