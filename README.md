@@ -4,7 +4,7 @@ The CompuRacer toolset for detection and exploitation of race conditions in web 
 The toolset can be split in three separate parts: Core application in `CompuRacerCore`, Burp extension in `CompuRacerExtensionBurp` and browser extensions (Chrome & Firefox) in `CompuRacerExtensionChrome` and `CompuRacerExtensionFirefox`. The `TestWebAppVouchers` folder contains a Flask test web app for voucher redemption that contains race conditions.
 
 ## Recommended software versions
-The toolset is only compatible with Python 3.7. It has been tested using Burp Suite Professional v1.7.37 & v2.1.03 (the Community Edition is also compatible), Firefox v. 69, Chrome v. 76 and Vagrant 2.1.5. It is tested on a MacBook Pro (2018) running macOS Mojave. Every individual tool is expected to be compatible with both Linux and Windows, but this is not fully tested.
+The toolset is compatible with python <=3.9. It has been tested using Burp Suite Professional v1.7.37 & v2.1.03 (the Community Edition is also compatible), Firefox v. 69, Chrome v. 76 and Vagrant 2.1.5. It is tested on a MacBook Pro (2018) running macOS Mojave. Every individual tool is expected to be compatible with both Linux and Windows, but this is not fully tested.
 
 ## Installation
 #### Clone the repository
@@ -13,10 +13,10 @@ The toolset is only compatible with Python 3.7. It has been tested using Burp Su
 * Go to the [`CompuRacer_Core/`](CompuRacer_Core/) folder.
 * Run: `$ pip3 install -r requirements.txt`  
 #### Install CompuRacer Burp Suite extension
-* First, download the Jython standalone JAR file at https://www.jython.org/download and install the Requests library dependancy using: `$ pip3 install requests`.
-* In the Burp Suite, go to: Extender > Options > Python Environment and select the downloaded JAR file.
-* Then, point to the folder where the Requests library is installed. On a mac, this is probably: `/Library/Frameworks/Python.framework/Versions/3.7/lib/python3.7/site-packages` or `~/Library/Python/3.7/lib/python/site-packages`.
-* Next, go to: Extender > Extensions > Add and select `Python` as the extension type.
+* First, download the Jython standalone JAR file at https://www.jython.org/download
+* In the Burp Suite, go to: Extensions > Extension settings > Python Environment and select the downloaded JAR file.
+* Then, point to the folder where the Requests library is installed. On a mac, this is probably: `/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/site-packages` or `~/Library/Python/3.9/lib/python/site-packages`.
+* Next, go to: Extensions > Add and select `Python` as the extension type.
 * Regarding the extension file, go to the [`CompuRacer_Extensions/Burp/`](CompuRacer_Extensions/Burp/) folder and select: `compu_racer_extension_burp.py`.
 * Click 'next' and after loading the extension, close the window.
 #### Install CompuRacer Firefox extension (optional) 
@@ -38,7 +38,7 @@ The Firefox, Chrome, Burp Suite extensions and test web app do not need any conf
 
 ## Running
 The Firefox, Chrome, Burp Suite extensions and test web app are already started after the install. The Computest Core can be started by running the following command within the `CompuRacer_Core` folder: <br>
-`$ python3.7 main.py [-h] [--port [PORT]] [--proxy [PROXY]]`
+`$ python3 main.py [-h] [--cli] [--port [PORT]] [--proxy [PROXY]]`
 
 ## How to use
 An elaborate manual on how to use the toolset can be found in [`CompuRacer_Manual.pdf`](CompuRacer_Manual.pdf).

@@ -11,12 +11,16 @@ import queue
 import os, sys
 import time
 from multiprocessing import Queue
+import warnings
+
+warnings.filterwarnings("ignore", category=UserWarning, message="resource_tracker: There appear to be")
+
 
 # Check Python version >= 3.7
 if not sys.version_info >= (3, 7):
-    sys.stderr.write("CompuRacer requires Python version >= 3.7\n\t"
-                     "On Linux use: sudo apt-get install python3.7\n\t"
-                     "              python3.7 main.py\n")
+    sys.stderr.write("CompuRacer requires Python version >= 3.9\n\t"
+                     "On Linux use: sudo apt-get install python3.9\n\t"
+                     "              python3.9 main.py\n")
     exit(1)
 
 # check whether external libs (from requirements.txt) are installed
@@ -27,7 +31,7 @@ try:
     from bs4 import BeautifulSoup
 except ModuleNotFoundError:
     sys.stderr.write("Could not find external dependencies, please run:\n\t"
-                     "python3.7 -m pip install -r requirements.txt\n")
+                     "python3 -m pip install -r requirements.txt\n")
     exit(1)
 
 # check whether the system has a display
@@ -53,7 +57,7 @@ if use_tkinter:
 __author__ = "R.J. van Emous @ Computest, B. van Wijk @ Computest"
 __license__ = "MIT License"
 __version__ = "v1.0.0 2023"
-__email__ = "rvanemous@computest.nl, bvanwijk@computest.nl"
+__email__ = "rvanemous@computest.nl, bartvwijkzk@outlook.com"
 __status__ = "Production v1"
 
 # --- Checking for arguments --- #

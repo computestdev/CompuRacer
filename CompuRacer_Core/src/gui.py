@@ -1,8 +1,9 @@
 import json
 import os
+import sys
 from typing import List, Any
 
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QStandardItem, QStandardItemModel
 from PyQt5.QtWidgets import QPushButton, QMainWindow, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QTabWidget, \
     QWidget, QLineEdit, QHBoxLayout, QApplication, QHeaderView, QTableView
@@ -115,12 +116,17 @@ class MainGUI(QMainWindow):
 
         # --- Add other important buttons --- #
         quit_button = QPushButton("Quit", self)
-        quit_button.clicked.connect(QApplication.quit)
+        quit_button.clicked.connect(self.shut_down)
         vbox.addWidget(quit_button)
 
         self.load_batches()
 
         batches_tab.setLayout(vbox)
+
+        return None
+
+    def shut_down(self) -> None:
+        QApplication.quit()
 
         return None
 
