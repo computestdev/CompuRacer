@@ -568,7 +568,7 @@ class BatchWindow(QMainWindow):
         return None
 
     def remove_request(self, request_id) -> None:
-        self.racer.comm_curr_remove(self.racer, request_id)
+        self.racer.comm_requests_remove(self.racer, request_id, None, False)
 
         self.update_json()
 
