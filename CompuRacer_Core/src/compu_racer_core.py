@@ -1093,8 +1093,7 @@ class CompuRacer:
 
         self.print_formatted_multi(
             utils.tabbed_string(string, 1),
-            utils.QType.NONE,
-            {re.compile(r"^\t*-"): utils.QType.RED, re.compile(r"^\t*\+"): utils.QType.GREEN})
+            utils.QType.NONE)
 
     # Note: only to be used internally with a valid request-id!
     @staticmethod
@@ -1136,14 +1135,7 @@ class CompuRacer:
     # --------------------------------------------------------------------------------------------------- #
     @staticmethod
     def get_batch_result_formatting():
-        return {re.compile(r".*?\t\s{10}[12]\d\d\s\s.*?"): utils.QType.GREEN,
-                re.compile(r".*?\t\s{10}[3]\d\d\s\s.*?"): utils.QType.YELLOW,
-                re.compile(r".*?\t\s{10}[4]\d\d\s\s.*?"): utils.QType.RED,
-                re.compile(r".*?\t\s{10}[5]\d\d\s\s.*?"): utils.QType.BLUE,
-                re.compile(r"'status_code': [12].."): utils.QType.GREEN,
-                re.compile(r"'status_code': 3.."): utils.QType.YELLOW,
-                re.compile(r"'status_code': 4.."): utils.QType.RED,
-                re.compile(r"'status_code': 5.."): utils.QType.BLUE}
+        return None
 
     @staticmethod
     def comm_batches_send(self, index=None, print_results=True, immediate_allowed=False):
@@ -1190,8 +1182,7 @@ class CompuRacer:
         col_names = Batch.get_mini_summary_header()
         output = tabulate(contents, col_names, showindex="always", tablefmt="simple") + "\n"
         if self.state['current_batch']:
-            self.print_formatted_multi(output, utils.QType.NONE,
-                                       {f" {re.escape(self.state['current_batch'])} ": utils.QType.BLUE})
+            self.print_formatted_multi(output, utils.QType.NONE)
         else:
             self.print_formatted(output, utils.QType.NONE)
 
