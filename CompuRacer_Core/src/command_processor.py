@@ -16,12 +16,12 @@ from queue import Queue
 
 import src.utils as utils
 
-from src.maingui import MainGUI
+from src.connectgui import ConnectGUI
 
-from PyQt5.QtCore import QThread, QObject, pyqtSignal
+from PyQt5.QtCore import QThread, pyqtSignal
 from PyQt5.QtWidgets import QApplication
 
-__version__ = "v1"
+__version__ = "v1.1.0"
 
 class GuiThread(QThread):
     start_gui_signal = pyqtSignal()
@@ -140,7 +140,7 @@ class CommandProcessor:
         self.print_formatted("Starting GUI " + __version__ + "..", utils.QType.INFORMATION)
         app = QApplication([])
 
-        MainGUI.show_requests_gui(self.racer, app, state, self)
+        ConnectGUI.show_requests_gui(self.racer, app, state, self)
 
     def command_interpreter(self):
         self.welcome_function(self.welcome_function_class)
