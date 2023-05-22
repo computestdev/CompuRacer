@@ -27,6 +27,9 @@ import threading
 import time
 import json
 import traceback
+import sys
+
+print(sys.version, sys.executable)
 
 import requests
 
